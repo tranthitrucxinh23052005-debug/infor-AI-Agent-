@@ -1,6 +1,8 @@
-# ẢNH HƯỞNG CỦA AI AGENT ĐỐI VỚI CÁC NGÀNH LĨNH VỰC KHOA HỌC MÁY TÍNH
+# TÁC ĐỘNG CỦA AI AGENT ĐỐI VỚI CÁC NGÀNH MÁY TÍNH
+<img width="1376" height="768" alt="image" src="https://github.com/user-attachments/assets/657ddab1-fb03-49b2-9e13-2f48cf32324f" />
 
-## Giới thiệu dự án
+
+## 📌 Giới thiệu dự án
 
 Dự án trực quan hóa dữ liệu nhằm phân tích tác động của Trí tuệ nhân tạo (AI) đối với các nghề nghiệp thuộc lĩnh vực Khoa học Máy tính (Computer Science).
 
@@ -15,7 +17,7 @@ Dashboard tập trung khám phá:
 
 ---
 
-## Mục tiêu nghiên cứu
+# 🎯 Mục tiêu nghiên cứu
 
 Nghiên cứu được xây dựng nhằm trả lời các câu hỏi:
 
@@ -28,7 +30,7 @@ Nghiên cứu được xây dựng nhằm trả lời các câu hỏi:
 
 ---
 
-# Cách tư duy xây dựng Dashboard
+# 🧠 Cách tư duy xây dựng Dashboard
 
 Dashboard được thiết kế theo tư duy kể chuyện dữ liệu (Data Storytelling).
 
@@ -36,11 +38,11 @@ Dashboard được thiết kế theo tư duy kể chuyện dữ liệu (Data Sto
 
 **Câu hỏi**
 
-> AI hiện đang tác động đến đâu trong ngành Máy tính?
+> AI hiện đang tác động đến đâu trong ngành CNTT?
 
 **Biểu đồ**
 
-<img width="1768" height="1085" alt="image" src="https://github.com/user-attachments/assets/cf63068d-cb1f-49be-8845-dd9f4857a7ee" />
+- Figure 1: AI Landscape Overview
 
 **Mục đích**
 
@@ -56,7 +58,8 @@ Xác định mức độ ảnh hưởng của AI tới từng nhóm nghề nghi�
 
 **Biểu đồ**
 
-<img width="1541" height="914" alt="image" src="https://github.com/user-attachments/assets/1c1ccf6a-03a0-4c8e-8c88-52d57ae9798a" />
+- Figure 2: Expert vs Worker Comparison
+- Confusion Matrix
 
 **Mục đích**
 
@@ -72,8 +75,7 @@ Phân tích sự khác biệt giữa góc nhìn chuyên gia và người lao đ�
 
 **Biểu đồ**
 
-<img width="1636" height="938" alt="image" src="https://github.com/user-attachments/assets/d44e74b7-3329-42e4-9a16-0d215c3ee6ce" />
-
+- Figure 3: Motivation Analysis
 
 **Mục đích**
 
@@ -89,7 +91,7 @@ Khám phá động lực thúc đẩy và những lo ngại liên quan đến AI
 
 **Biểu đồ**
 
-<img width="1600" height="916" alt="image" src="https://github.com/user-attachments/assets/f550fec0-2aa3-4e6a-b2dd-3477c08f4ed9" />
+- Figure 4: LLM Usage Analysis
 
 **Mục đích**
 
@@ -105,7 +107,7 @@ Xác định các mục đích sử dụng AI phổ biến trong thực tế.
 
 **Biểu đồ**
 
-<img width="1780" height="999" alt="image" src="https://github.com/user-attachments/assets/ce81fb0c-74fc-474b-b2e4-1463a1674531" />
+- Figure 5: Task Characteristics Analysis
 
 **Mục đích**
 
@@ -121,8 +123,9 @@ Xác định các đặc trưng giúp AI đạt hiệu suất cao.
 
 **Biểu đồ**
 
-<img width="1808" height="1073" alt="image" src="https://github.com/user-attachments/assets/1d6f839c-bc70-4f7c-a185-2c4a9a50daad" />
-
+- Figure 6: Future AI Demand
+- Radar Chart
+- Knowledge Analysis
 
 **Mục đích**
 
@@ -134,39 +137,24 @@ Dự báo xu hướng phát triển AI trong giai đoạn tiếp theo.
 
 ```text
 Raw Datasets
-│
-├── Worker Survey
-├── Expert Assessment
-├── Task Metadata
-└── Occupation Information
         │
         ▼
-Data Cleaning
+Data Preparation
         │
         ▼
-Data Transformation
+Computer Science Filtering
         │
         ▼
-Feature Engineering
+Metric Calculation
         │
         ▼
-Exploratory Analysis
+Dashboard Visualization
         │
         ▼
-Visualization Layer
-        │
-        ├── Figure 1
-        ├── Figure 2
-        ├── Figure 3
-        ├── Figure 4
-        ├── Figure 5
-        └── Figure 6
+Insight Discovery
         │
         ▼
-Insight Extraction
-        │
-        ▼
-Conclusion & Future Trends
+Future Trend Analysis
 ```
 
 ---
@@ -177,7 +165,7 @@ Conclusion & Future Trends
 
 Mô tả bức tranh tổng quan về tác động của AI tới các nghề nghiệp trong lĩnh vực Computer Science.
 
-![Figure1](images/figure1.png)
+<img width="1768" height="1085" alt="image" src="https://github.com/user-attachments/assets/621b7a18-c309-4681-a35f-d5a60d6cfd4a" />
 
 ---
 
@@ -185,7 +173,8 @@ Mô tả bức tranh tổng quan về tác động của AI tới các nghề ng
 
 So sánh đánh giá giữa chuyên gia và người lao động về khả năng tự động hóa.
 
-![Figure2](images/figure2.png)
+<img width="1541" height="914" alt="image" src="https://github.com/user-attachments/assets/e6125446-c3dd-4e5e-831e-05662b0fa218" />
+
 
 ---
 
@@ -193,7 +182,8 @@ So sánh đánh giá giữa chuyên gia và người lao động về khả năn
 
 Phân tích lý do người lao động muốn hoặc không muốn AI tham gia công việc.
 
-![Figure3](images/figure3.png)
+<img width="1636" height="938" alt="image" src="https://github.com/user-attachments/assets/c5d66a7d-c1d5-4124-93a0-0d7f2a510304" />
+
 
 ---
 
@@ -201,7 +191,8 @@ Phân tích lý do người lao động muốn hoặc không muốn AI tham gia 
 
 Phân tích các hình thức ứng dụng mô hình ngôn ngữ lớn trong công việc.
 
-![Figure4](images/figure4.png)
+<img width="1600" height="916" alt="image" src="https://github.com/user-attachments/assets/c1cd2bef-d222-43c3-a830-a3b8d01bf69d" />
+
 
 ---
 
@@ -209,7 +200,8 @@ Phân tích các hình thức ứng dụng mô hình ngôn ngữ lớn trong cô
 
 Khám phá những loại nhiệm vụ AI thực hiện hiệu quả nhất.
 
-![Figure5](images/figure5.png)
+<img width="1780" height="999" alt="image" src="https://github.com/user-attachments/assets/81f47bab-0838-410b-aa83-125d6d1ed3d3" />
+
 
 ---
 
@@ -217,57 +209,30 @@ Khám phá những loại nhiệm vụ AI thực hiện hiệu quả nhất.
 
 Dự báo nhu cầu AI và kỹ năng liên quan trong tương lai.
 
-![Figure6](images/figure6.png)
+<img width="1808" height="1073" alt="image" src="https://github.com/user-attachments/assets/6ed0c8c0-03a9-43f2-8fa8-0e2e64a3b60c" />
+
 
 ---
 
 # 📈 Kết quả nổi bật
 
-## Insight 1
+## 1. Tỷ lệ tiếp nhận AI cao nhưng chủ yếu tập trung vào các tác vụ giản đơn
+Mặc dù có đến 89% người làm trong ngành Máy tính đã sử dụng LLM trong công việc và 65.5% sử dụng thường xuyên, việc ứng dụng hàng ngày lại bị lệch hẳn về các tác vụ cơ bản. Cụ thể, các tác vụ được dùng hàng ngày nhiều nhất là Giao tiếp/Email (44%) và Tra cứu thông tin (41%). Ngược lại, đối với các tác vụ cốt lõi và phức tạp như Thiết kế hệ thống (System Design), có tới 39% người dùng chọn mức "Không dùng". Điều này cho thấy AI hiện tại đang đóng vai trò như một trợ lý hành chính cá nhân hơn là một kỹ sư chuyên nghiệp.
 
-AI đang tác động mạnh tới các công việc có tính lặp lại và quy trình chuẩn hóa cao.
+## 2. Vấn đề niềm tin của con người với AI
+Ma trận nhầm lẫn chỉ ra một điểm nghẽn lớn trong việc tự động hóa: Có đến 30.5% tổng số tác vụ mà AI CÓ THỂ tự động hóa, nhưng người lao động KHÔNG MUỐN giao phó cho AI. Sự "kháng cự" này dẫn đến chỉ số F1-Score rất thấp (0.170), phản ánh một khoảng cách lớn về niềm tin. Người lao động dường như chưa sẵn sàng hoặc chưa tin tưởng để nhường lại quyền kiểm soát cho AI ngay cả khi công nghệ đã đáp ứng được yêu cầu kỹ thuật của tác vụ đó.
 
-## Insight 2
+## 3. Yếu tố con người là cốt lõi đối với các tác vụ có tính chuyên môn và độ bất định cao
+Phân tích lý do không muốn tự động hóa và heat map năng lực cho thấy sự thống nhất: AI làm rất kém và con người cũng không muốn dùng AI ở những công việc có độ không chắc chắn cao (Uncertainty), yêu cầu kiến thức chuyên môn sâu (Domain Expertise) và giao tiếp giữa người với người (Human Interaction). Đây là lý do tại sao AI được đánh giá làm tốt nhất ở các vai trò như Web Admins hay Web Devs, nhưng lại đạt điểm rất thấp và bị từ chối tự động hóa ở các vị trí quản lý hoặc yêu cầu nghiệp vụ ngách như IT PM, IS Managers hay Aerospace Engineers. Cụ thể, 35.3% người dùng cần giữ lại yếu tố con người vì "Cần kiến thức chuyên sâu" và 33.3% vì "Cần kiểm soát trực tiếp".
 
-Người lao động và chuyên gia tồn tại sự khác biệt đáng kể trong đánh giá khả năng tự động hóa.
+## 4. Động lực cốt lõi của tự động hóa là tối ưu hóa tài nguyên thay vì nâng cao tư duy sáng tạo
+Lý do lớn nhất khiến người lao động MUỐN sử dụng AI chủ yếu mang tính thực dụng: Tiết kiệm thời gian (74.8%), Mở rộng quy mô (54.9%), và Giảm lỗi người dùng (52.7%). Họ mong đợi AI giải quyết các tác vụ lặp lại (50.2%) để giải phóng sức lao động. Điều này khẳng định định vị hiện tại của AI trong mắt người lao động là một "công cụ tăng năng suất" (productivity tool) hơn là một đối tác tư duy chiến lược.
 
-## Insight 3
+## 5. Khoảng trống năng lực tương lai của AI 
+Biểu đồ Radar về nhu cầu AI Agent tương lai tiết lộ rằng Code Generation không còn là ưu tiên cải thiện hàng đầu (chỉ cần khoảng cách cải thiện +0.6). Thay vào đó, kỳ vọng của người dùng đang chuyển dịch mạnh mẽ lên các khía cạnh vĩ mô và rủi ro cao hơn. Thiết kế hệ thống (System Design) và Phân tích bảo mật (Security Analysis) là hai mảng có khoảng cách cần cải thiện lớn nhất (lần lượt là +1.2 và +1.1) từ nay đến năm 2028.
 
-Lợi ích lớn nhất của AI là:
-
-- Tiết kiệm thời gian
-- Tăng năng suất
-- Hỗ trợ xử lý công việc lặp lại
-
-## Insight 4
-
-LLM đang trở thành công cụ hỗ trợ phổ biến trong:
-
-- Sinh mã nguồn
-- Viết tài liệu
-- Tìm kiếm thông tin
-- Gỡ lỗi chương trình
-
-## Insight 5
-
-Các nhiệm vụ đòi hỏi:
-
-- Sáng tạo
-- Thiết kế hệ thống
-- Tư duy chiến lược
-
-vẫn cần vai trò quan trọng của con người.
-
-## Insight 6
-
-Nhu cầu về:
-
-- Code Generation
-- Automated Testing
-- DevOps Automation
-- Security Analysis
-
-được dự báo sẽ tăng mạnh trong giai đoạn 2025–2030.
+## 6. Sự chuyển dịch: Từ "Thực thi" sang "Kiểm định và Kiến trúc"
+Khi AI dần đảm nhiệm các tác vụ lặp lại và viết code cơ bản, yêu cầu tri thức đối với người lao động đang thay đổi hoàn toàn. (Hình 6) cho thấy hai kỹ năng được đánh giá có tầm quan trọng tuyệt đối (mức độ 5.0/5.0) là "Tư duy hệ thống & kiến trúc" (AI không thay thế được) và "Kiểm tra & validate output AI" (fact-checking, review code). Điều này cung cấp insight quan trọng cho định hướng nghề nghiệp: Kỹ sư tương lai không cạnh tranh với AI về tốc độ viết code, mà cạnh tranh về khả năng thiết kế hệ thống tổng thể và năng lực thẩm định tính chính xác/an toàn của sản phẩm do AI tạo ra.
 
 ---
 
