@@ -1,6 +1,13 @@
 # TÁC ĐỘNG CỦA AI AGENT ĐỐI VỚI CÁC NGÀNH MÁY TÍNH
 <img width="1376" height="768" alt="image" src="https://github.com/user-attachments/assets/657ddab1-fb03-49b2-9e13-2f48cf32324f" />
-
+# MỘT SỐ LƯU Ý:
+1. File app.ipynb là file code thuần
+2. File app_streamlit.py là file kết hợp với streamlit để trực quan hóa trên web, để xem vui lòng tải code xuống và chay lệnh
+   
+```bash
+streamlit run app_streamlit.py
+```
+3. Link https://btcn.base44.app/ sử dụng vibe coding để thân thiện với người dùng hơn streamlit ( do streamlit có nhiều hạn chế đối với nhu cầu sử dụng với người dùng hiện tại.
 
 ## 📌 Giới thiệu dự án
 
