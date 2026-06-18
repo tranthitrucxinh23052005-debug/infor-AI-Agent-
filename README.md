@@ -40,7 +40,6 @@ Dashboard được thiết kế theo tư duy kể chuyện dữ liệu (Data Sto
 
 **Biểu đồ**
 
-- Figure 1: AI Landscape Overview
 <img width="1768" height="1085" alt="image" src="https://github.com/user-attachments/assets/cf63068d-cb1f-49be-8845-dd9f4857a7ee" />
 
 **Mục đích**
@@ -57,7 +56,6 @@ Xác định mức độ ảnh hưởng của AI tới từng nhóm nghề nghi�
 
 **Biểu đồ**
 
-- Figure 2: Expert vs Worker Comparison
 <img width="1541" height="914" alt="image" src="https://github.com/user-attachments/assets/1c1ccf6a-03a0-4c8e-8c88-52d57ae9798a" />
 
 **Mục đích**
@@ -74,7 +72,6 @@ Phân tích sự khác biệt giữa góc nhìn chuyên gia và người lao đ�
 
 **Biểu đồ**
 
-- Figure 3: Motivation Analysis
 <img width="1636" height="938" alt="image" src="https://github.com/user-attachments/assets/d44e74b7-3329-42e4-9a16-0d215c3ee6ce" />
 
 
@@ -92,7 +89,6 @@ Khám phá động lực thúc đẩy và những lo ngại liên quan đến AI
 
 **Biểu đồ**
 
-- Figure 4: LLM Usage Analysis
 <img width="1600" height="916" alt="image" src="https://github.com/user-attachments/assets/f550fec0-2aa3-4e6a-b2dd-3477c08f4ed9" />
 
 **Mục đích**
@@ -109,7 +105,6 @@ Xác định các mục đích sử dụng AI phổ biến trong thực tế.
 
 **Biểu đồ**
 
-- Figure 5: Task Characteristics Analysis
 <img width="1780" height="999" alt="image" src="https://github.com/user-attachments/assets/ce81fb0c-74fc-474b-b2e4-1463a1674531" />
 
 **Mục đích**
@@ -126,7 +121,6 @@ Xác định các đặc trưng giúp AI đạt hiệu suất cao.
 
 **Biểu đồ**
 
-- Figure 6: Future AI Demand
 <img width="1808" height="1073" alt="image" src="https://github.com/user-attachments/assets/1d6f839c-bc70-4f7c-a185-2c4a9a50daad" />
 
 
