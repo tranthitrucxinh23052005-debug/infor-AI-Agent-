@@ -243,10 +243,10 @@ def filter_it(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data
 def load_data():
-    desires = pd.read_csv("domain_worker_desires.csv")
-    metadata = pd.read_csv("domain_worker_metadata.csv")
-    capability = pd.read_csv("expert_rated_technological_capability.csv")
-    tasks = pd.read_csv("task_statement_with_metadata.csv")
+    desires = pd.read_csv("data/domain_worker_desires.csv")
+    metadata = pd.read_csv("data/domain_worker_metadata.csv")
+    capability = pd.read_csv("data/expert_rated_technological_capability.csv")
+    tasks = pd.read_csv("data/task_statement_with_metadata.csv")
     return desires, metadata, capability, tasks
 
 
@@ -971,11 +971,13 @@ elif page == "🎯 Đánh Giá & Lộ Trình Cá Nhân":
             rf_wage = RandomForestRegressor(n_estimators=300, random_state=42)
             rf_wage.fit(X_tr, y_tr)
             r2_test = r2_score(y_te, rf_wage.predict(X_te))
-            r2_label = f"R² (kiểm tra) = {r2_test:.2f}"
+            r2_display = f"{r2_test:.2f}"
+            r2_note = "R² đo trên 25% dữ liệu giữ lại để kiểm tra (không dùng để huấn luyện)."
         else:
             rf_wage = RandomForestRegressor(n_estimators=300, random_state=42)
             rf_wage.fit(occ_stats[CAP_FEATURES], occ_stats["Occupation Mean Annual Wage"])
-            r2_label = "mẫu quá nhỏ để kiểm tra — chỉ mang tính minh họa"
+            r2_display = "—"
+            r2_note = "Mẫu dưới 10 nghề nên không đủ để chia train/test; mô hình bên dưới chỉ mang tính minh họa xu hướng, không có chỉ số độ khớp đáng tin cậy."
 
         importance_wage = pd.DataFrame({
             "Yếu tố": [SHORT_VN.get(c, c) for c in CAP_FEATURES],
@@ -984,8 +986,9 @@ elif page == "🎯 Đánh Giá & Lộ Trình Cá Nhân":
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Số nghề dùng để huấn luyện", len(occ_stats))
-        c2.metric("Độ khớp mô hình", r2_label)
+        c2.metric("R² trên tập kiểm tra", r2_display)
         c3.metric("Số yếu tố đầu vào", len(CAP_FEATURES))
+        st.caption(f"ℹ️ {r2_note}")
         st.caption(
             "⚠️ Mẫu huấn luyện chỉ gồm các nghề trong nhóm ngành công nghệ đã lọc, nên kết quả mang "
             "tính minh họa xu hướng, không phải con số dự báo tuyệt đối."
