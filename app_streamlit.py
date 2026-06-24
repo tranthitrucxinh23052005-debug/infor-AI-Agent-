@@ -7,6 +7,8 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
 from sklearn.ensemble import RandomForestRegressor, IsolationForest
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_similarity
@@ -38,7 +40,6 @@ PALETTE = {
     "muted": "#64748B",
 }
 
-# Nhãn tiếng Việt cho các cột gốc (dùng trong tham số labels= của Plotly Express)
 VN_LABELS = {
     "Automation Capacity Rating": "Năng lực tự động hóa",
     "Human Agency Scale Rating": "Quyền tự chủ con người",
@@ -57,7 +58,6 @@ VN_LABELS = {
     "degree": "Số kết nối",
 }
 
-# Nhãn ngắn tiếng Việt cho 6 yếu tố năng lực — dùng cho ma trận tương quan, radar, biểu đồ ảnh hưởng
 SHORT_VN = {
     "Automation Capacity Rating": "Tự động hóa",
     "Physical Action Requirement": "Thể chất",
@@ -67,7 +67,6 @@ SHORT_VN = {
     "Human Agency Scale Rating": "Tự chủ con người",
 }
 
-# Nhãn ngắn tiếng Việt cho các cột thuộc bộ dữ liệu "tasks"
 SHORT_VN_TASK = {
     "Frequency": "Tần suất",
     "Importance": "Quan trọng",
@@ -77,6 +76,11 @@ SHORT_VN_TASK = {
 }
 
 OCC_COL = "Occupation (O*NET-SOC Title)"
+CAP_FEATURES = [
+    "Automation Capacity Rating", "Physical Action Requirement", "Involved Uncertainty",
+    "Domain Expertise Requirement", "Interpersonal Communication Requirement",
+    "Human Agency Scale Rating",
+]
 
 # ============================================================
 # HÀM TIỆN ÍCH DÙNG CHUNG
@@ -84,7 +88,6 @@ OCC_COL = "Occupation (O*NET-SOC Title)"
 
 
 def style_fig(fig, title=None, height=560):
-    """Áp dụng giao diện sáng, hiện đại, dễ đọc cho mọi biểu đồ Plotly trong app."""
     fig.update_layout(
         template="plotly_white",
         paper_bgcolor="#FFFFFF",
@@ -104,7 +107,6 @@ def style_fig(fig, title=None, height=560):
 
 
 def chart_header(title, caption):
-    """In tên biểu đồ + một dòng chú thích giải thích biểu đồ dùng để làm gì."""
     st.subheader(title)
     st.caption(f"💡 {caption}")
 
@@ -118,6 +120,26 @@ def kpi_card(col, value, label, accent, icon=""):
             </div>""",
             unsafe_allow_html=True,
         )
+
+
+def get_capability_features(df: pd.DataFrame, dropna: bool = True) -> pd.DataFrame:
+    """Trả về bản dữ liệu chỉ gồm 6 cột năng lực dùng chung cho nhiều trang,
+    tránh lặp lại logic dropna ở từng nơi."""
+    cols = [c for c in CAP_FEATURES if c in df.columns]
+    return df.dropna(subset=cols).reset_index(drop=True) if dropna else df[cols]
+
+
+def corr_chart(df: pd.DataFrame, cols: list, rename_map: dict, height: int = 560):
+    """Vẽ ma trận tương quan dùng chung — tránh lặp code ở nhiều trang."""
+    corr = df[cols].corr().rename(index=rename_map, columns=rename_map)
+    fig = px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu_r", zmin=-1, zmax=1)
+    return style_fig(fig, height=height)
+
+
+def heuristic_note(text: str):
+    """Nhắc người dùng rằng một chỉ số là công thức minh họa, không phải kết quả
+    suy luận thống kê chặt chẽ — áp dụng nhất quán ở các trang có điểm số tự chế."""
+    st.caption(f"⚠️ *Chỉ số minh họa (heuristic):* {text}")
 
 
 # ============================================================
@@ -134,65 +156,33 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
     color: #0F172A;
     font-family: 'Inter', 'Segoe UI', sans-serif;
 }
-
-[data-testid="stSidebar"]{
-    background:#FFFFFF;
-    border-right: 1px solid #E2E8F0;
-}
-
-[data-testid="stHeader"]{
-    background: rgba(255,255,255,0);
-}
-
+[data-testid="stSidebar"]{ background:#FFFFFF; border-right: 1px solid #E2E8F0; }
+[data-testid="stHeader"]{ background: rgba(255,255,255,0); }
 h1, h2, h3 { color:#0F172A !important; font-weight:700 !important; }
 
 .kpi-card{
-    background:#FFFFFF;
-    border:1px solid #E5E9F2;
-    border-left:5px solid var(--accent, #2563EB);
-    border-radius:18px;
-    padding:22px 18px;
-    text-align:center;
-    box-shadow:0 4px 14px rgba(15,23,42,0.06);
-    transition: transform .15s ease;
-    margin-bottom:8px;
+    background:#FFFFFF; border:1px solid #E5E9F2; border-left:5px solid var(--accent, #2563EB);
+    border-radius:18px; padding:22px 18px; text-align:center;
+    box-shadow:0 4px 14px rgba(15,23,42,0.06); transition: transform .15s ease; margin-bottom:8px;
 }
 .kpi-card:hover{ transform: translateY(-3px); }
+.kpi-number{ font-size:30px; font-weight:700; color:#1D4ED8; }
+.kpi-label{ color:#64748B; font-size:14px; margin-top:4px; }
 
-.kpi-number{
-    font-size:30px;
-    font-weight:700;
-    color:#1D4ED8;
-}
-
-.kpi-label{
-    color:#64748B;
-    font-size:14px;
-    margin-top:4px;
-}
-
-/* Bo tròn nút bấm và ô nhập để giao diện hiện đại, thân thiện hơn */
 .stButton > button, .stDownloadButton > button{
-    border-radius:999px !important;
-    border:1px solid #2563EB !important;
-    padding:0.5rem 1.4rem !important;
+    border-radius:999px !important; border:1px solid #2563EB !important; padding:0.5rem 1.4rem !important;
 }
-
 div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, div[data-baseweb="base-input"]{
     border-radius:14px !important;
 }
-
 [data-testid="stMetric"]{
-    background:#FFFFFF;
-    border:1px solid #E5E9F2;
-    border-radius:16px;
-    padding:14px 10px;
+    background:#FFFFFF; border:1px solid #E5E9F2; border-radius:16px; padding:14px 10px;
     box-shadow:0 2px 10px rgba(15,23,42,0.05);
 }
-
-[data-testid="stExpander"]{
-    border-radius:14px;
-    border:1px solid #E5E9F2;
+[data-testid="stExpander"]{ border-radius:14px; border:1px solid #E5E9F2; }
+.insight-box{
+    background:#F8FAFC; border:1px solid #E2E8F0; border-left:4px solid #2563EB;
+    border-radius:12px; padding:16px 20px; margin:10px 0 18px 0; font-size:14.5px; color:#1E293B;
 }
 </style>
 """,
@@ -202,35 +192,47 @@ div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, div[data-base
 # ============================================================
 # LỌC DỮ LIỆU: CHỈ GIỮ NHÓM NGÀNH CNTT / KHMT / KHOA HỌC DỮ LIỆU / HTTT
 # ============================================================
-# Bộ từ khóa được nhóm theo 4 lĩnh vực để đảm bảo bao quát đầy đủ các nghề
-# thuộc nhóm ngành công nghệ: Khoa học máy tính, Công nghệ thông tin,
-# Khoa học dữ liệu và Hệ thống thông tin.
+# Ưu tiên 1: lọc theo mã O*NET-SOC nếu cột mã nghề có sẵn trong dữ liệu — đây là
+# cách lọc chính xác nhất vì không phụ thuộc vào cách viết tên nghề.
+# Nhóm mã SOC liên quan tới CNTT/KHMT/KHDL/HTTT đều nằm trong họ "15-12xx"
+# (Computer Occupations) theo phân loại O*NET-SOC 2019/2020.
+SOC_CODE_COL_CANDIDATES = ["O*NET-SOC Code", "Occupation Code", "SOC Code"]
+SOC_PREFIX = "15-12"
 
+# Ưu tiên 2 (dự phòng khi không có mã SOC): lọc theo từ khóa trong tên nghề,
+# nhưng dùng RANH GIỚI TỪ (\b...\b) để tránh khớp nhầm các nghề không liên quan
+# (ví dụ: "computer" không được khớp vào "Computer Numerically Controlled Tool
+# Programmers" — nghề thuộc cơ khí, không thuộc CNTT).
 IT_KEYWORDS = [
-    # Khoa học máy tính & Kỹ thuật phần mềm
-    "computer", "software", "programmer", "systems analyst",
-    "computer network", "network and computer", "computer hardware",
-    "computer occupations", "quality assurance analysts and testers",
-    # Công nghệ thông tin & Hệ thống thông tin
-    "information security", "information systems", "information technology",
-    "information research scientist", "database", "web developer",
-    "web and digital interface", "computer support specialist",
-    "network support specialist", "network administrator",
-    "telecommunications", "cloud", "devops",
-    # Khoa học dữ liệu & Phân tích dữ liệu
-    "data scientist", "data engineer", "data analyst", "data warehousing",
-    "machine learning", "artificial intelligence", "business intelligence",
+    r"computer (and information|network|systems|hardware|support)",
+    r"software developer", r"software quality assurance", r"programmer",
+    r"systems analyst", r"computer occupations", r"quality assurance analysts and testers",
+    r"information security", r"information systems", r"information technology",
+    r"information research scientist", r"database administrator", r"database architect",
+    r"web developer", r"web and digital interface", r"computer support specialist",
+    r"network support specialist", r"network administrator", r"network architect",
+    r"cloud (engineer|architect)", r"devops",
+    r"data scientist", r"data engineer", r"data warehousing",
+    r"\bdata analyst", r"machine learning", r"\bartificial intelligence\b",
+    r"business intelligence",
 ]
+IT_PATTERN = "|".join(rf"(?:{kw})" for kw in IT_KEYWORDS)
 
 
 @st.cache_data(show_spinner=False)
 def filter_it(df: pd.DataFrame) -> pd.DataFrame:
     """Chỉ giữ lại các dòng thuộc nhóm ngành CNTT / Khoa học máy tính /
-    Khoa học dữ liệu / Hệ thống thông tin."""
+    Khoa học dữ liệu / Hệ thống thông tin. Ưu tiên lọc theo mã SOC nếu có,
+    nếu không thì dùng từ khóa có ranh giới từ trên tên nghề."""
+    soc_col = next((c for c in SOC_CODE_COL_CANDIDATES if c in df.columns), None)
+    if soc_col is not None:
+        mask = df[soc_col].astype(str).str.startswith(SOC_PREFIX)
+        if mask.any():
+            return df.loc[mask].reset_index(drop=True)
+
     if OCC_COL not in df.columns:
         return df
-    pattern = "|".join(IT_KEYWORDS)
-    mask = df[OCC_COL].astype(str).str.lower().str.contains(pattern, regex=True, na=False)
+    mask = df[OCC_COL].astype(str).str.lower().str.contains(IT_PATTERN, regex=True, na=False)
     return df.loc[mask].reset_index(drop=True)
 
 
@@ -241,10 +243,10 @@ def filter_it(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data
 def load_data():
-    desires = pd.read_csv("data/domain_worker_desires.csv")
-    metadata = pd.read_csv("data/domain_worker_metadata.csv")
-    capability = pd.read_csv("data/expert_rated_technological_capability.csv")
-    tasks = pd.read_csv("data/task_statement_with_metadata.csv")
+    desires = pd.read_csv("domain_worker_desires.csv")
+    metadata = pd.read_csv("domain_worker_metadata.csv")
+    capability = pd.read_csv("expert_rated_technological_capability.csv")
+    tasks = pd.read_csv("task_statement_with_metadata.csv")
     return desires, metadata, capability, tasks
 
 
@@ -255,8 +257,8 @@ metadata = filter_it(metadata)
 capability = filter_it(capability)
 tasks = filter_it(tasks)
 
-# Lưới an toàn: đảm bảo "desires" chỉ còn các Task ID thuộc nhóm ngành CNTT,
-# kể cả khi file gốc của "desires" không có cột tên nghề nghiệp.
+# Lưới an toàn: đồng bộ "desires" theo Task ID của "capability" — chỉ áp dụng
+# khi cả hai có cột Task ID, tránh lỗi KeyError nếu schema thay đổi.
 if "Task ID" in desires.columns and "Task ID" in capability.columns:
     desires = desires[desires["Task ID"].isin(capability["Task ID"])].reset_index(drop=True)
 
@@ -271,9 +273,10 @@ if capability.empty or tasks.empty:
 # ============================================================
 # THANH ĐIỀU HƯỚNG (SIDEBAR)
 # ============================================================
+# Đã gộp 10 trang ban đầu xuống 7 trang để giảm trùng lặp nội dung
+# (nhiều ma trận tương quan / biểu đồ giống nhau ở các trang khác nhau).
 
 with st.sidebar:
-
     st.markdown("## 📊 Phân Tích Tác Động AI")
     st.caption("Hệ thống phân tích tác động của AI đến nhóm ngành Công nghệ thông tin")
 
@@ -281,22 +284,13 @@ with st.sidebar:
         "📈 Tổng Quan",
         "🌍 Toàn Cảnh Tự Động Hóa",
         "🧠 Khoảng Cách Niềm Tin",
-        "📋 Phân Tích Chi Tiết",
-        "🗂️ Phân Vùng Tác Động",
-        "🎯 Đánh Giá Năng Lực Cá Nhân",
-        "📉 Dự Báo Xu Hướng",
-        "🔬 Phân Tích Thống Kê Chuyên Sâu",
+        "📋 Phân Tích Chi Tiết Đầu Việc",
+        "🗂️ Phân Vùng & Thống Kê Chuyên Sâu",
         "🔗 Mạng Lưới Nghề Nghiệp",
-        "🎓 Lộ Trình Học Tập",
+        "🎯 Đánh Giá & Lộ Trình Cá Nhân",
     ]
 
-    page = st.pills(
-        "Điều hướng",
-        PAGES,
-        default=PAGES[0],
-        required=True,
-        label_visibility="collapsed",
-    )
+    page = st.pills("Điều hướng", PAGES, default=PAGES[0], required=True, label_visibility="collapsed")
 
     st.divider()
 
@@ -329,7 +323,7 @@ if page == "📈 Tổng Quan":
     total_occupations = tasks[OCC_COL].nunique() if OCC_COL in tasks.columns else 0
     automation_capacity = round(capability["Automation Capacity Rating"].mean(), 2)
     human_agency = round(capability["Human Agency Scale Rating"].mean(), 2)
-    automation_desire = round(desires["Automation Desire Rating"].mean(), 2)
+    automation_desire = round(desires["Automation Desire Rating"].mean(), 2) if not desires.empty else float("nan")
     domain_expertise = round(capability["Domain Expertise Requirement"].mean(), 2)
 
     c1, c2, c3 = st.columns(3)
@@ -342,6 +336,24 @@ if page == "📈 Tổng Quan":
     kpi_card(c5, human_agency, "Quyền tự chủ con người (TB)", PALETTE["success"], "🧑‍💻")
     kpi_card(c6, domain_expertise, "Yêu cầu chuyên môn (TB)", PALETTE["secondary"], "🎓")
 
+    # Tóm tắt điều hành bằng văn bản — tính động theo dữ liệu hiện tại, không
+    # phải câu chữ cố định, để người ra quyết định nắm ngay thông điệp chính.
+    gap = automation_capacity - human_agency
+    gap_desc = (
+        "năng lực tự động hóa kỹ thuật đang cao hơn quyền tự chủ con người"
+        if gap > 0 else "quyền tự chủ con người vẫn chiếm ưu thế so với năng lực tự động hóa kỹ thuật"
+    )
+    st.markdown(
+        f"""<div class="insight-box">
+        📝 <b>Tóm tắt:</b> Trên {total_occupations} nghề và {total_tasks:,} đầu việc thuộc nhóm
+        ngành công nghệ, {gap_desc} (chênh lệch {abs(gap):.2f} điểm trên thang 1–5).
+        Mức sẵn sàng giao việc cho AI của người lao động hiện ở mức {automation_desire:.2f}/5,
+        {'cao hơn' if automation_desire > automation_capacity else 'thấp hơn'} năng lực kỹ thuật
+        thực tế của AI — cho thấy {'người lao động cởi mở hơn năng lực AI hiện có' if automation_desire > automation_capacity else 'còn khoảng cách niềm tin cần thu hẹp'}.
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
     st.divider()
 
     top_occ = tasks[OCC_COL].value_counts().head(15).reset_index()
@@ -352,10 +364,8 @@ if page == "📈 Tổng Quan":
         "Các nghề trong nhóm ngành công nghệ đang được khảo sát với số lượng đầu việc (task) "
         "nhiều nhất trong bộ dữ liệu — đây cũng là các nghề được phân tích sâu nhất trong báo cáo.",
     )
-    fig = px.bar(
-        top_occ, x="Số đầu việc", y="Nghề nghiệp", orientation="h",
-        color="Số đầu việc", color_continuous_scale="Blues",
-    )
+    fig = px.bar(top_occ, x="Số đầu việc", y="Nghề nghiệp", orientation="h",
+                 color="Số đầu việc", color_continuous_scale="Blues")
     st.plotly_chart(style_fig(fig, height=650), use_container_width=True)
 
 # ============================================================
@@ -377,16 +387,13 @@ elif page == "🌍 Toàn Cảnh Tự Động Hóa":
     )
 
     col1, col2 = st.columns(2)
-
     with col1:
         chart_header(
             "Top 20 Nghề Có Năng Lực Tự Động Hóa Cao Nhất",
             "Các nghề được chuyên gia đánh giá là AI hiện có khả năng kỹ thuật đảm nhiệm cao nhất.",
         )
-        fig1 = px.bar(
-            top_capacity, x="Automation Capacity Rating", y=OCC_COL, orientation="h",
-            color="Automation Capacity Rating", color_continuous_scale="Blues", labels=VN_LABELS,
-        )
+        fig1 = px.bar(top_capacity, x="Automation Capacity Rating", y=OCC_COL, orientation="h",
+                      color="Automation Capacity Rating", color_continuous_scale="Blues", labels=VN_LABELS)
         st.plotly_chart(style_fig(fig1, height=650), use_container_width=True)
 
     with col2:
@@ -394,10 +401,8 @@ elif page == "🌍 Toàn Cảnh Tự Động Hóa":
             "Top 20 Nghề Có Quyền Tự Chủ Con Người Cao Nhất",
             "Các nghề đòi hỏi con người ra quyết định, phán đoán nhiều — khó bị AI thay thế hoàn toàn.",
         )
-        fig2 = px.bar(
-            top_agency, x="Human Agency Scale Rating", y=OCC_COL, orientation="h",
-            color="Human Agency Scale Rating", color_continuous_scale="Greens", labels=VN_LABELS,
-        )
+        fig2 = px.bar(top_agency, x="Human Agency Scale Rating", y=OCC_COL, orientation="h",
+                      color="Human Agency Scale Rating", color_continuous_scale="Greens", labels=VN_LABELS)
         st.plotly_chart(style_fig(fig2, height=650), use_container_width=True)
 
     st.divider()
@@ -406,38 +411,27 @@ elif page == "🌍 Toàn Cảnh Tự Động Hóa":
         "Tương Quan Giữa Năng Lực Tự Động Hóa Và Quyền Tự Chủ Con Người",
         "Mỗi điểm là một đầu việc. Màu thể hiện yêu cầu chuyên môn, kích thước thể hiện yêu cầu giao tiếp.",
     )
-    fig3 = px.scatter(
-        capability, x="Automation Capacity Rating", y="Human Agency Scale Rating",
-        color="Domain Expertise Requirement", size="Interpersonal Communication Requirement",
-        hover_name=OCC_COL, color_continuous_scale="Viridis", labels=VN_LABELS,
-    )
+    fig3 = px.scatter(capability, x="Automation Capacity Rating", y="Human Agency Scale Rating",
+                       color="Domain Expertise Requirement", size="Interpersonal Communication Requirement",
+                       hover_name=OCC_COL, color_continuous_scale="Viridis", labels=VN_LABELS)
     st.plotly_chart(style_fig(fig3, height=650), use_container_width=True)
 
     chart_header(
         "Ma Trận Tương Quan Giữa Các Yếu Tố",
         "Giá trị gần 1 (xanh đậm) là tương quan thuận mạnh, gần -1 (đỏ đậm) là tương quan nghịch mạnh.",
     )
-    cols = [
-        "Automation Capacity Rating", "Physical Action Requirement", "Involved Uncertainty",
-        "Domain Expertise Requirement", "Interpersonal Communication Requirement",
-        "Human Agency Scale Rating",
-    ]
-    corr = capability[cols].corr().rename(index=SHORT_VN, columns=SHORT_VN)
-    fig4 = px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu_r", zmin=-1, zmax=1)
-    st.plotly_chart(style_fig(fig4, height=600), use_container_width=True)
+    st.plotly_chart(corr_chart(capability, CAP_FEATURES, SHORT_VN, height=600), use_container_width=True)
 
     chart_header(
         "Hồ Sơ Tổng Thể Của Nhóm Ngành Công Nghệ",
         "Giá trị trung bình của 6 yếu tố trên toàn bộ dữ liệu — dùng làm đường tham chiếu ở mục "
         "Đánh Giá Năng Lực Cá Nhân.",
     )
-    values = [capability[c].mean() for c in cols]
-    labels_radar = [SHORT_VN[c] for c in cols]
+    values = [capability[c].mean() for c in CAP_FEATURES]
+    labels_radar = [SHORT_VN[c] for c in CAP_FEATURES]
     fig5 = go.Figure()
-    fig5.add_trace(go.Scatterpolar(
-        r=values, theta=labels_radar, fill="toself",
-        line_color=PALETTE["primary"], fillcolor="rgba(37,99,235,0.20)",
-    ))
+    fig5.add_trace(go.Scatterpolar(r=values, theta=labels_radar, fill="toself",
+                                    line_color=PALETTE["primary"], fillcolor="rgba(37,99,235,0.20)"))
     fig5.update_layout(polar=dict(radialaxis=dict(visible=True)))
     st.plotly_chart(style_fig(fig5, height=600), use_container_width=True)
 
@@ -453,94 +447,92 @@ elif page == "🧠 Khoảng Cách Niềm Tin":
         "giao việc cho AI (theo người lao động), nhằm xác định khoảng cách niềm tin giữa hai bên."
     )
 
-    merged = pd.merge(
-        capability[["Task ID", "Automation Capacity Rating"]],
-        desires[["Task ID", "Automation Desire Rating"]],
-        on="Task ID",
-    )
-
-    if merged.empty:
+    if "Task ID" not in capability.columns or "Task ID" not in desires.columns:
         st.warning(
-            "Không có dữ liệu trùng khớp giữa năng lực AI và mức độ sẵn sàng của người lao động "
-            "sau khi lọc theo nhóm ngành công nghệ."
+            "Không thể thực hiện phân tích này vì dữ liệu thiếu cột 'Task ID' để ghép năng lực AI "
+            "với mong muốn của người lao động."
         )
     else:
-        threshold = st.slider(
-            "Ngưỡng quyết định (điểm trên thang 1–5)", 1.0, 5.0, 3.0, 0.1,
-            help="Từ ngưỡng này trở lên được coi là 'khả thi / đồng ý', dưới ngưỡng là 'chưa khả thi / từ chối'.",
+        merged = pd.merge(
+            capability[["Task ID", "Automation Capacity Rating"]],
+            desires[["Task ID", "Automation Desire Rating"]],
+            on="Task ID",
         )
 
-        merged["AI_Feasible"] = merged["Automation Capacity Rating"] >= threshold
-        merged["Worker_Willing"] = merged["Automation Desire Rating"] >= threshold
+        if merged.empty:
+            st.warning(
+                "Không có dữ liệu trùng khớp giữa năng lực AI và mức độ sẵn sàng của người lao động "
+                "sau khi lọc theo nhóm ngành công nghệ."
+            )
+        else:
+            threshold = st.slider(
+                "Ngưỡng quyết định (điểm trên thang 1–5)", 1.0, 5.0, 3.0, 0.1,
+                help="Từ ngưỡng này trở lên được coi là 'khả thi / đồng ý', dưới ngưỡng là 'chưa khả thi / từ chối'.",
+            )
 
-        tp = len(merged[(merged.AI_Feasible) & (merged.Worker_Willing)])
-        fp = len(merged[(~merged.AI_Feasible) & (merged.Worker_Willing)])
-        fn = len(merged[(merged.AI_Feasible) & (~merged.Worker_Willing)])
-        tn = len(merged[(~merged.AI_Feasible) & (~merged.Worker_Willing)])
+            merged["AI_Feasible"] = merged["Automation Capacity Rating"] >= threshold
+            merged["Worker_Willing"] = merged["Automation Desire Rating"] >= threshold
 
-        accuracy = (tp + tn) / (tp + tn + fp + fn)
-        precision = tp / (tp + fp + 1e-6)
-        recall = tp / (tp + fn + 1e-6)
-        f1 = 2 * precision * recall / (precision + recall + 1e-6)
-        trust_gap = abs(
-            merged["Automation Capacity Rating"].mean() - merged["Automation Desire Rating"].mean()
-        )
+            tp = len(merged[(merged.AI_Feasible) & (merged.Worker_Willing)])
+            fp = len(merged[(~merged.AI_Feasible) & (merged.Worker_Willing)])
+            fn = len(merged[(merged.AI_Feasible) & (~merged.Worker_Willing)])
+            tn = len(merged[(~merged.AI_Feasible) & (~merged.Worker_Willing)])
+            total = tp + tn + fp + fn
 
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Độ chính xác", round(accuracy, 3))
-        c2.metric("Precision", round(precision, 3))
-        c3.metric("Recall", round(recall, 3))
-        c4.metric("Điểm F1", round(f1, 3))
-        c5.metric("Khoảng cách niềm tin", round(trust_gap, 3))
+            accuracy = (tp + tn) / total if total else float("nan")
+            precision = tp / (tp + fp) if (tp + fp) else float("nan")
+            recall = tp / (tp + fn) if (tp + fn) else float("nan")
+            f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else float("nan")
+            trust_gap = abs(merged["Automation Capacity Rating"].mean() - merged["Automation Desire Rating"].mean())
 
-        cm = np.array([[tn, fp], [fn, tp]])
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.metric("Độ chính xác (Accuracy)", f"{accuracy:.3f}" if accuracy == accuracy else "—")
+            c2.metric("Precision", f"{precision:.3f}" if precision == precision else "—")
+            c3.metric("Recall", f"{recall:.3f}" if recall == recall else "—")
+            c4.metric("Điểm F1", f"{f1:.3f}" if f1 == f1 else "—")
+            c5.metric("Khoảng cách niềm tin", round(trust_gap, 3))
+            st.caption(
+                "ℹ️ Accuracy/Precision/Recall/F1 ở đây coi 'năng lực AI ≥ ngưỡng' là nhãn tham chiếu "
+                "(không phải nhãn thật tuyệt đối) để đo mức đồng thuận giữa đánh giá chuyên gia và "
+                "mong muốn người lao động — không phải độ chính xác của một mô hình dự báo."
+            )
 
-        chart_header(
-            "Ma Trận Nhầm Lẫn: Năng Lực AI So Với Mức Độ Sẵn Sàng Của Người Lao Động",
-            "So khớp đánh giá 'khả thi' của chuyên gia (trục dọc) với mức 'sẵn sàng giao việc' của "
-            "người lao động (trục ngang).",
-        )
-        fig = px.imshow(
-            cm, text_auto=True,
-            labels=dict(x="Người lao động", y="Chuyên gia"),
-            x=["Từ chối", "Chấp nhận"], y=["Từ chối", "Chấp nhận"],
-            color_continuous_scale="Blues",
-        )
-        st.plotly_chart(style_fig(fig, height=550), use_container_width=True)
+            cm = np.array([[tn, fp], [fn, tp]])
+            chart_header(
+                "Ma Trận Đồng Thuận: Năng Lực AI So Với Mức Độ Sẵn Sàng Của Người Lao Động",
+                "So khớp đánh giá 'khả thi' của chuyên gia (trục dọc) với mức 'sẵn sàng giao việc' của "
+                "người lao động (trục ngang).",
+            )
+            fig = px.imshow(cm, text_auto=True, labels=dict(x="Người lao động", y="Chuyên gia"),
+                             x=["Từ chối", "Chấp nhận"], y=["Từ chối", "Chấp nhận"], color_continuous_scale="Blues")
+            st.plotly_chart(style_fig(fig, height=550), use_container_width=True)
 
-        chart_header(
-            "Phân Bố Năng Lực AI So Với Mức Độ Sẵn Sàng Giao Việc",
-            "Đường nét đứt là ngưỡng quyết định đã chọn ở trên. Các góc thể hiện vùng AI làm được "
-            "nhưng người lao động chưa muốn giao (hoặc ngược lại).",
-        )
-        fig2 = px.scatter(
-            merged, x="Automation Capacity Rating", y="Automation Desire Rating",
-            color="Automation Capacity Rating", color_continuous_scale="Viridis", labels=VN_LABELS,
-        )
-        fig2.add_vline(x=threshold, line_dash="dash", line_color=PALETTE["muted"])
-        fig2.add_hline(y=threshold, line_dash="dash", line_color=PALETTE["muted"])
-        st.plotly_chart(style_fig(fig2, height=650), use_container_width=True)
+            chart_header(
+                "Phân Bố Năng Lực AI So Với Mức Độ Sẵn Sàng Giao Việc",
+                "Đường nét đứt là ngưỡng quyết định đã chọn ở trên. Các góc thể hiện vùng AI làm được "
+                "nhưng người lao động chưa muốn giao (hoặc ngược lại).",
+            )
+            fig2 = px.scatter(merged, x="Automation Capacity Rating", y="Automation Desire Rating",
+                               color="Automation Capacity Rating", color_continuous_scale="Viridis", labels=VN_LABELS)
+            fig2.add_vline(x=threshold, line_dash="dash", line_color=PALETTE["muted"])
+            fig2.add_hline(y=threshold, line_dash="dash", line_color=PALETTE["muted"])
+            st.plotly_chart(style_fig(fig2, height=650), use_container_width=True)
 
-        st.info(
-            f"""
-### 📌 Nhận định
-
-- **Khoảng cách niềm tin** = {trust_gap:.2f} điểm (trên thang 1–5)
-- **Độ chính xác** = {accuracy:.2%}
-- **Precision** = {precision:.2%}
-- **Recall** = {recall:.2%}
-- **Điểm F1** = {f1:.2%}
-
-Khoảng cách giữa năng lực AI thực tế và mức độ sẵn sàng giao việc của người lao động trong
-nhóm ngành công nghệ hiện ở mức **{trust_gap:.2f}** điểm.
-"""
-        )
+            st.markdown(
+                f"""<div class="insight-box">
+                📌 <b>Nhận định:</b> Khoảng cách niềm tin hiện ở mức <b>{trust_gap:.2f}</b> điểm
+                (thang 1–5). Với ngưỡng {threshold:.1f}, tỉ lệ đồng thuận giữa chuyên gia và người
+                lao động là <b>{accuracy:.1%}</b>; trong các trường hợp chuyên gia cho là khả thi,
+                có <b>{recall:.1%}</b> được người lao động cũng đồng ý giao cho AI.
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
 # ============================================================
 # TRANG 4 — PHÂN TÍCH CHI TIẾT ĐẦU VIỆC
 # ============================================================
 
-elif page == "📋 Phân Tích Chi Tiết":
+elif page == "📋 Phân Tích Chi Tiết Đầu Việc":
 
     st.title("📋 Phân Tích Chi Tiết Đầu Việc")
     st.caption(
@@ -556,472 +548,230 @@ elif page == "📋 Phân Tích Chi Tiết":
     c3.metric("Lương trung bình", f"${df['Occupation Mean Annual Wage'].mean():,.0f}")
     c4.metric("Mức độ quan trọng (TB)", round(df["Importance"].mean(), 2))
 
-    chart_header(
-        "Phân Bố Mức Độ Quan Trọng (Importance)",
-        "Mức độ quan trọng của các đầu việc đối với nghề nghiệp tương ứng, theo thang đánh giá O*NET.",
-    )
-    fig1 = px.histogram(
-        df, x="Importance", nbins=40, color_discrete_sequence=[PALETTE["primary"]], labels=VN_LABELS,
-    )
-    st.plotly_chart(style_fig(fig1, height=480), use_container_width=True)
+    tab1, tab2 = st.tabs(["📊 Phân bố", "💰 Lương & Quy mô lao động"])
 
-    chart_header(
-        "Phân Bố Mức Độ Liên Quan (Relevance)",
-        "Mức độ liên quan của đầu việc đối với nghề nghiệp — giá trị cao nghĩa là đầu việc gắn "
-        "liền với nghề đó.",
-    )
-    fig2 = px.histogram(
-        df, x="Relevance", nbins=40, color_discrete_sequence=[PALETTE["warning"]], labels=VN_LABELS,
-    )
-    st.plotly_chart(style_fig(fig2, height=480), use_container_width=True)
+    with tab1:
+        col1, col2 = st.columns(2)
+        with col1:
+            chart_header("Phân Bố Mức Độ Quan Trọng (Importance)",
+                          "Mức độ quan trọng của các đầu việc đối với nghề nghiệp tương ứng, theo thang O*NET.")
+            fig1 = px.histogram(df, x="Importance", nbins=40, color_discrete_sequence=[PALETTE["primary"]], labels=VN_LABELS)
+            st.plotly_chart(style_fig(fig1, height=440), use_container_width=True)
+        with col2:
+            chart_header("Phân Bố Mức Độ Liên Quan (Relevance)",
+                          "Mức độ liên quan của đầu việc đối với nghề nghiệp — giá trị cao nghĩa là đầu việc gắn liền với nghề đó.")
+            fig2 = px.histogram(df, x="Relevance", nbins=40, color_discrete_sequence=[PALETTE["warning"]], labels=VN_LABELS)
+            st.plotly_chart(style_fig(fig2, height=440), use_container_width=True)
 
-    chart_header(
-        "Phân Bố Lương Theo Năm",
-        "Hộp thể hiện khoảng lương phổ biến (trung vị, tứ phân vị); các điểm rời là những nghề có "
-        "mức lương bất thường cao hoặc thấp.",
-    )
-    fig3 = px.box(df, y="Occupation Mean Annual Wage", points="outliers", labels=VN_LABELS)
-    fig3.update_traces(marker_color=PALETTE["secondary"], line_color=PALETTE["secondary"])
-    st.plotly_chart(style_fig(fig3, height=550), use_container_width=True)
+        chart_header(
+            "Ma Trận Tương Quan",
+            "Mối liên hệ giữa tần suất, mức độ quan trọng, mức độ liên quan, lương và quy mô lao động.",
+        )
+        cols5 = ["Frequency", "Importance", "Relevance", "Occupation Mean Annual Wage", "Occupation Employment"]
+        st.plotly_chart(corr_chart(df, cols5, SHORT_VN_TASK, height=520), use_container_width=True)
 
-    chart_header(
-        "Phân Bố Quy Mô Lao Động",
-        "Số lượng người đang làm việc trong từng nghề — cho thấy nghề nào có quy mô thị trường "
-        "lao động lớn.",
-    )
-    fig4 = px.histogram(
-        df, x="Occupation Employment", nbins=50, color_discrete_sequence=[PALETTE["success"]], labels=VN_LABELS,
-    )
-    st.plotly_chart(style_fig(fig4, height=480), use_container_width=True)
+    with tab2:
+        col1, col2 = st.columns(2)
+        with col1:
+            chart_header("Phân Bố Lương Theo Năm",
+                          "Hộp thể hiện khoảng lương phổ biến (trung vị, tứ phân vị); các điểm rời là nghề có mức lương bất thường.")
+            fig3 = px.box(df, y="Occupation Mean Annual Wage", points="outliers", labels=VN_LABELS)
+            fig3.update_traces(marker_color=PALETTE["secondary"], line_color=PALETTE["secondary"])
+            st.plotly_chart(style_fig(fig3, height=480), use_container_width=True)
+        with col2:
+            chart_header("Phân Bố Quy Mô Lao Động",
+                          "Số lượng người đang làm việc trong từng nghề — cho thấy nghề nào có quy mô thị trường lao động lớn.")
+            fig4 = px.histogram(df, x="Occupation Employment", nbins=50, color_discrete_sequence=[PALETTE["success"]], labels=VN_LABELS)
+            st.plotly_chart(style_fig(fig4, height=480), use_container_width=True)
 
-    chart_header(
-        "Ma Trận Tương Quan",
-        "Mối liên hệ giữa tần suất, mức độ quan trọng, mức độ liên quan, lương và quy mô lao động.",
-    )
-    cols = ["Frequency", "Importance", "Relevance", "Occupation Mean Annual Wage", "Occupation Employment"]
-    corr = df[cols].corr().rename(index=SHORT_VN_TASK, columns=SHORT_VN_TASK)
-    fig5 = px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu_r", zmin=-1, zmax=1)
-    st.plotly_chart(style_fig(fig5, height=550), use_container_width=True)
-
-    wage_df = (
-        df.groupby(OCC_COL)["Occupation Mean Annual Wage"]
-        .mean().sort_values(ascending=False).head(20).reset_index()
-    )
-    chart_header(
-        "Top 20 Nghề Có Mức Lương Cao Nhất",
-        "Các nghề trong nhóm ngành công nghệ có mức lương trung bình hàng năm cao nhất.",
-    )
-    fig6 = px.bar(
-        wage_df, x="Occupation Mean Annual Wage", y=OCC_COL, orientation="h",
-        color="Occupation Mean Annual Wage", color_continuous_scale="Blues", labels=VN_LABELS,
-    )
-    st.plotly_chart(style_fig(fig6, height=850), use_container_width=True)
-
-    emp_df = (
-        df.groupby(OCC_COL)["Occupation Employment"]
-        .mean().sort_values(ascending=False).head(20).reset_index()
-    )
-    chart_header(
-        "Top 20 Nghề Có Quy Mô Lao Động Lớn Nhất",
-        "Các nghề trong nhóm ngành công nghệ đang thu hút số lượng người lao động đông nhất.",
-    )
-    fig7 = px.bar(
-        emp_df, x="Occupation Employment", y=OCC_COL, orientation="h",
-        color="Occupation Employment", color_continuous_scale="Purples", labels=VN_LABELS,
-    )
-    st.plotly_chart(style_fig(fig7, height=850), use_container_width=True)
+        col3, col4 = st.columns(2)
+        with col3:
+            wage_df = df.groupby(OCC_COL)["Occupation Mean Annual Wage"].mean().sort_values(ascending=False).head(15).reset_index()
+            chart_header("Top 15 Nghề Có Mức Lương Cao Nhất", "Các nghề có mức lương trung bình hàng năm cao nhất trong nhóm ngành.")
+            fig6 = px.bar(wage_df, x="Occupation Mean Annual Wage", y=OCC_COL, orientation="h",
+                          color="Occupation Mean Annual Wage", color_continuous_scale="Blues", labels=VN_LABELS)
+            st.plotly_chart(style_fig(fig6, height=600), use_container_width=True)
+        with col4:
+            emp_df = df.groupby(OCC_COL)["Occupation Employment"].mean().sort_values(ascending=False).head(15).reset_index()
+            chart_header("Top 15 Nghề Có Quy Mô Lao Động Lớn Nhất", "Các nghề thu hút số lượng người lao động đông nhất.")
+            fig7 = px.bar(emp_df, x="Occupation Employment", y=OCC_COL, orientation="h",
+                          color="Occupation Employment", color_continuous_scale="Purples", labels=VN_LABELS)
+            st.plotly_chart(style_fig(fig7, height=600), use_container_width=True)
 
 # ============================================================
-# TRANG 5 — PHÂN VÙNG TÁC ĐỘNG TỰ ĐỘNG HÓA
+# TRANG 5 — PHÂN VÙNG TÁC ĐỘNG & THỐNG KÊ CHUYÊN SÂU
 # ============================================================
 
-elif page == "🗂️ Phân Vùng Tác Động":
+elif page == "🗂️ Phân Vùng & Thống Kê Chuyên Sâu":
 
-    st.title("🗂️ Phân Vùng Tác Động Tự Động Hóa")
+    st.title("🗂️ Phân Vùng Tác Động & Thống Kê Chuyên Sâu")
     st.caption(
-        "Dùng thuật toán phân cụm KMeans để chia các đầu việc trong nhóm ngành công nghệ thành 4 "
-        "vùng theo mức độ ảnh hưởng của AI, sau đó giảm chiều dữ liệu bằng PCA để trực quan hóa "
-        "trong không gian 3 chiều."
+        "Phân cụm các đầu việc theo mức độ ảnh hưởng của AI (KMeans), sau đó áp dụng các kỹ thuật "
+        "thống kê/học máy bổ sung (PCA, t-SNE, Random Forest, Isolation Forest) để hiểu sâu hơn cấu "
+        "trúc dữ liệu của nhóm ngành công nghệ."
     )
 
-    features = [
-        "Automation Capacity Rating", "Physical Action Requirement", "Involved Uncertainty",
-        "Domain Expertise Requirement", "Interpersonal Communication Requirement",
-        "Human Agency Scale Rating",
-    ]
-    df = capability.dropna(subset=features).reset_index(drop=True)
-    X = df[features]
+    df = get_capability_features(capability)
     k = min(4, len(df))
 
     if k < 2:
         st.warning("Không đủ dữ liệu để phân cụm sau khi lọc theo nhóm ngành công nghệ.")
-    else:
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-        df["Cluster"] = kmeans.fit_predict(X_scaled)
-
-        cluster_names = {0: "Thế Mạnh Con Người", 1: "Vùng Rủi Ro Cao", 2: "Vùng Kết Hợp", 3: "Vùng Ổn Định"}
-        df["Zone"] = df["Cluster"].map(cluster_names)
-
-        n_components = max(1, min(3, len(df) - 1, len(features)))
-        pca = PCA(n_components=n_components)
-        coords = pca.fit_transform(X_scaled)
-        df["x"] = coords[:, 0]
-        df["y"] = coords[:, 1] if coords.shape[1] > 1 else 0.0
-        df["z"] = coords[:, 2] if coords.shape[1] > 2 else 0.0
-
-        zone_colors = {
-            "Thế Mạnh Con Người": PALETTE["secondary"],
-            "Vùng Rủi Ro Cao": PALETTE["danger"],
-            "Vùng Kết Hợp": PALETTE["warning"],
-            "Vùng Ổn Định": PALETTE["success"],
-        }
-
-        chart_header(
-            "Bản Đồ 3D Các Vùng Tác Động AI",
-            "Mỗi điểm là một đầu việc, được nén từ 6 chiều dữ liệu xuống 3 chiều (PCA) để dễ "
-            "quan sát các vùng phân cụm.",
-        )
-        fig = px.scatter_3d(
-            df, x="x", y="y", z="z", color="Zone", hover_name=OCC_COL,
-            color_discrete_map=zone_colors, labels=VN_LABELS,
-        )
-        fig.update_traces(marker=dict(size=5))
-        fig.update_layout(scene=dict(bgcolor="#FFFFFF"))
-        st.plotly_chart(style_fig(fig, height=750), use_container_width=True)
-
-        count_df = df["Zone"].value_counts().reset_index()
-        count_df.columns = ["Vùng", "Số lượng"]
-        chart_header(
-            "Tỷ Trọng Các Vùng Tác Động",
-            "Tỷ lệ phần trăm số đầu việc rơi vào từng vùng tác động của AI.",
-        )
-        fig2 = px.pie(
-            count_df, names="Vùng", values="Số lượng", hole=0.5,
-            color="Vùng", color_discrete_map=zone_colors,
-        )
-        st.plotly_chart(style_fig(fig2, height=550), use_container_width=True)
-
-        profile = df.groupby("Zone")[features].mean().round(2).rename(columns=SHORT_VN)
-        profile.index.name = "Vùng"
-        st.subheader("Hồ Sơ Trung Bình Theo Vùng")
-        st.caption("💡 Giá trị trung bình của 6 yếu tố trong mỗi vùng — giúp hiểu rõ đặc điểm của từng nhóm.")
-        st.dataframe(profile, use_container_width=True)
-
-        danger_ratio = len(df[df.Zone == "Vùng Rủi Ro Cao"]) / len(df)
-        st.info(
-            f"""
-### 📌 Nhận định
-
-🔴 **Vùng Rủi Ro Cao**: {danger_ratio:.1%} đầu việc có rủi ro tự động hóa cao.
-
-🔵 **Thế Mạnh Con Người**: các nghề cần nhiều quyền tự chủ và phán đoán của con người.
-
-🟠 **Vùng Kết Hợp**: AI hỗ trợ mạnh nhưng chưa thể thay thế hoàn toàn con người.
-
-🟢 **Vùng Ổn Định**: cân bằng tốt giữa năng lực AI và vai trò con người.
-"""
-        )
-
-# ============================================================
-# TRANG 6 — ĐÁNH GIÁ NĂNG LỰC CÁ NHÂN
-# ============================================================
-
-elif page == "🎯 Đánh Giá Năng Lực Cá Nhân":
-
-    st.title("🎯 Đánh Giá Năng Lực Cá Nhân")
-    st.caption(
-        "Nhập hồ sơ năng lực của bản thân để so sánh với mức trung bình của nhóm ngành công nghệ, "
-        "từ đó nhận gợi ý các nghề nghiệp phù hợp nhất."
-    )
-
-    st.markdown("##### Hồ sơ năng lực của bạn (thang điểm 1–5)")
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        automation = st.slider("Mức độ phù hợp tự động hóa", 1.0, 5.0, 3.0)
-        physical = st.slider("Yêu cầu thể chất", 1.0, 5.0, 3.0)
-
-    with col2:
-        uncertainty = st.slider("Mức độ chấp nhận bất định", 1.0, 5.0, 3.0)
-        domain = st.slider("Chuyên môn lĩnh vực", 1.0, 5.0, 3.0)
-
-    with col3:
-        communication = st.slider("Kỹ năng giao tiếp", 1.0, 5.0, 3.0)
-        agency = st.slider("Mức độ tự chủ", 1.0, 5.0, 3.0)
-
-    user_vector = np.array([automation, physical, uncertainty, domain, communication, agency])
-
-    market_vector = np.array([
-        capability["Automation Capacity Rating"].mean(),
-        capability["Physical Action Requirement"].mean(),
-        capability["Involved Uncertainty"].mean(),
-        capability["Domain Expertise Requirement"].mean(),
-        capability["Interpersonal Communication Requirement"].mean(),
-        capability["Human Agency Scale Rating"].mean(),
-    ])
-
-    labels = ["Tự động hóa", "Thể chất", "Bất định", "Chuyên môn", "Giao tiếp", "Tự chủ"]
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(
-        r=market_vector, theta=labels, fill="toself", name="Trung bình ngành",
-        line_color=PALETTE["secondary"], fillcolor="rgba(14,165,233,0.20)",
-    ))
-    fig.add_trace(go.Scatterpolar(
-        r=user_vector, theta=labels, fill="toself", name="Hồ sơ của bạn",
-        line_color=PALETTE["accent"], fillcolor="rgba(124,58,237,0.20)",
-    ))
-    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
-
-    chart_header(
-        "So Sánh Hồ Sơ Cá Nhân Với Mức Trung Bình Ngành",
-        "Vùng càng lệch khỏi nhau ở trục nào thì bạn càng khác biệt so với mặt bằng chung ở yếu tố đó.",
-    )
-    st.plotly_chart(style_fig(fig, height=600), use_container_width=True)
-
-    distance = np.linalg.norm(user_vector - market_vector)
-    score = max(0, 100 - distance * 15)
-    st.metric("🎯 Độ phù hợp với mặt bằng ngành", f"{score:.1f}%")
-
-    gap = user_vector - market_vector
-    gap_df = pd.DataFrame({"Yếu tố": labels, "Khoảng cách": gap})
-
-    chart_header(
-        "Khoảng Cách Theo Từng Yếu Tố",
-        "Giá trị dương: bạn đang vượt mức trung bình ngành ở yếu tố đó. Giá trị âm: bạn đang thấp hơn.",
-    )
-    fig2 = px.bar(gap_df, x="Yếu tố", y="Khoảng cách", color="Khoảng cách", color_continuous_scale="RdYlGn")
-    st.plotly_chart(style_fig(fig2, height=450), use_container_width=True)
-
-    feat_cols = [
-        "Automation Capacity Rating", "Physical Action Requirement", "Involved Uncertainty",
-        "Domain Expertise Requirement", "Interpersonal Communication Requirement",
-        "Human Agency Scale Rating",
-    ]
-    X_knn = capability[feat_cols].dropna()
-    k_neighbors = min(10, len(X_knn))
-
-    if k_neighbors >= 1:
-        model = NearestNeighbors(n_neighbors=k_neighbors)
-        model.fit(X_knn)
-        distances, indices = model.kneighbors([user_vector])
-        recommend = capability.loc[X_knn.index].iloc[indices[0]]
-
-        chart_header(
-            "Nghề Nghiệp Gợi Ý Cho Bạn",
-            "Danh sách các nghề có hồ sơ năng lực gần nhất với hồ sơ bạn vừa nhập.",
-        )
-        st.dataframe(
-            recommend[[OCC_COL]].rename(columns={OCC_COL: "Nghề nghiệp gợi ý"}),
-            use_container_width=True,
-        )
-
-    if score >= 85:
-        st.success("✅ Hồ sơ của bạn rất phù hợp với mặt bằng chung của nhóm ngành công nghệ.")
-    elif score >= 70:
-        st.warning("⚠️ Hồ sơ khá phù hợp, nên nâng cấp thêm một vài kỹ năng.")
-    else:
-        st.error("🚨 Khoảng cách kỹ năng còn lớn so với mặt bằng ngành — nên có kế hoạch nâng cấp kỹ năng.")
-
-# ============================================================
-# TRANG 7 — DỰ BÁO XU HƯỚNG
-# ============================================================
-
-elif page == "📉 Dự Báo Xu Hướng":
-
-    st.title("📉 Dự Báo Xu Hướng Ngành Công Nghệ")
-    st.caption(
-        "Dự báo xu hướng tự động hóa, quyền tự chủ con người và yêu cầu chuyên môn theo từng kịch "
-        "bản tăng trưởng AI."
-    )
-
-    SCENARIOS = {"Thận trọng": 0.05, "Trung bình": 0.10, "Tích cực": 0.20}
-    scenario = st.pills(
-        "Chọn kịch bản tăng trưởng AI", list(SCENARIOS.keys()),
-        default="Trung bình", required=True,
-    )
-    growth = SCENARIOS[scenario]
-
-    base_automation = capability["Automation Capacity Rating"].mean()
-    base_agency = capability["Human Agency Scale Rating"].mean()
-    base_domain = capability["Domain Expertise Requirement"].mean()
-
-    years = [2025, 2026, 2027, 2028]
-    automation_curve = [base_automation * (1 + growth * i) for i in range(len(years))]
-    agency_curve = [base_agency * (1 + 0.03 * i) for i in range(len(years))]
-    domain_curve = [base_domain * (1 + 0.05 * i) for i in range(len(years))]
-
-    forecast = pd.DataFrame({
-        "Năm": years,
-        "Tự động hóa": automation_curve,
-        "Tự chủ con người": agency_curve,
-        "Chuyên môn": domain_curve,
-    })
-
-    chart_header(
-        "Dự Báo Xu Hướng 4 Năm Tới",
-        "Mô phỏng đơn giản dựa trên tốc độ tăng trưởng của kịch bản đã chọn — không phải dự báo "
-        "chính xác tuyệt đối, chỉ mang tính minh họa.",
-    )
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=forecast["Năm"], y=forecast["Tự động hóa"], name="Tự động hóa", line=dict(color=PALETTE["danger"])))
-    fig.add_trace(go.Scatter(x=forecast["Năm"], y=forecast["Tự chủ con người"], name="Tự chủ con người", line=dict(color=PALETTE["secondary"])))
-    fig.add_trace(go.Scatter(x=forecast["Năm"], y=forecast["Chuyên môn"], name="Chuyên môn", line=dict(color=PALETTE["success"])))
-    st.plotly_chart(style_fig(fig, height=600), use_container_width=True)
-
-    future_skill = domain_curve[-1] * 0.4 + agency_curve[-1] * 0.4 + (5 - automation_curve[-1]) * 0.2
-    risk_score = automation_curve[-1] / 5 * 100
-    opportunity = (agency_curve[-1] + domain_curve[-1]) / 10 * 100
-    survival = (100 - risk_score) * 0.4 + opportunity * 0.6
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Chỉ số kỹ năng tương lai", round(future_skill, 2))
-    c2.metric("Điểm rủi ro", f"{risk_score:.1f}%")
-    c3.metric("Điểm cơ hội", f"{opportunity:.1f}%")
-    c4.metric("Khả năng duy trì nghề nghiệp", f"{survival:.1f}%")
-
-    simulation = [base_automation * (1 + np.random.normal(growth, 0.03) * 3) for _ in range(1000)]
-
-    chart_header(
-        "Mô Phỏng Monte Carlo Về Năng Lực Tự Động Hóa",
-        "1.000 kịch bản ngẫu nhiên minh họa mức độ không chắc chắn của dự báo năng lực tự động "
-        "hóa trong tương lai.",
-    )
-    fig2 = px.histogram(simulation, nbins=50, color_discrete_sequence=[PALETTE["secondary"]])
-    fig2.update_layout(showlegend=False, xaxis_title="Năng lực tự động hóa mô phỏng", yaxis_title="Số lần")
-    st.plotly_chart(style_fig(fig2, height=550), use_container_width=True)
-
-    if survival >= 80:
-        st.success(
-            "🟢 **Triển vọng nghề nghiệp tốt** — quyền tự chủ con người và chuyên môn cao, "
-            "rủi ro tự động hóa thấp."
-        )
-    elif survival >= 60:
-        st.warning("🟡 **Rủi ro trung bình** — nên chủ động nâng cấp kỹ năng trong thời gian tới.")
-    else:
-        st.error("🔴 **Rủi ro tự động hóa cao** — cần kế hoạch nâng cấp kỹ năng khẩn cấp.")
-
-# ============================================================
-# TRANG 8 — PHÂN TÍCH THỐNG KÊ CHUYÊN SÂU
-# ============================================================
-
-elif page == "🔬 Phân Tích Thống Kê Chuyên Sâu":
-
-    st.title("🔬 Phân Tích Thống Kê Chuyên Sâu")
-    st.caption("Các phân tích thống kê và học máy chuyên sâu trên dữ liệu năng lực của nhóm ngành công nghệ.")
-
-    features = [
-        "Automation Capacity Rating", "Physical Action Requirement", "Involved Uncertainty",
-        "Domain Expertise Requirement", "Interpersonal Communication Requirement",
-        "Human Agency Scale Rating",
-    ]
-    df = capability.dropna(subset=features).reset_index(drop=True)
-    X = df[features]
-
-    chart_header(
-        "Ma Trận Tương Quan",
-        "Mối liên hệ tuyến tính giữa các yếu tố năng lực — giúp nhận diện yếu tố nào có xu hướng "
-        "đi cùng nhau.",
-    )
-    corr = X.corr().rename(index=SHORT_VN, columns=SHORT_VN)
-    fig = px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu", zmin=-1, zmax=1)
-    st.plotly_chart(style_fig(fig, height=600), use_container_width=True)
+        st.stop()
 
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X_scaled = scaler.fit_transform(df[CAP_FEATURES])
 
-    n_pca = max(1, min(2, X_scaled.shape[1], len(df) - 1))
-    pca = PCA(n_components=n_pca)
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+    df["Cluster"] = kmeans.fit_predict(X_scaled)
+
+    # --- Gán tên vùng dựa trên ĐẶC ĐIỂM THỰC của từng cụm, không theo số thứ tự
+    # ngẫu nhiên của KMeans (đây là điểm sửa lỗi quan trọng so với bản gốc) ---
+    cluster_profile = df.groupby("Cluster")[["Automation Capacity Rating", "Human Agency Scale Rating"]].mean()
+    cluster_profile["automation_rank"] = cluster_profile["Automation Capacity Rating"].rank(ascending=False)
+    cluster_profile["agency_rank"] = cluster_profile["Human Agency Scale Rating"].rank(ascending=False)
+
+    def name_cluster(row):
+        if row["automation_rank"] == 1:
+            return "Vùng Rủi Ro Cao"          # năng lực tự động hóa cao nhất
+        if row["agency_rank"] == 1:
+            return "Thế Mạnh Con Người"        # quyền tự chủ con người cao nhất
+        if row["automation_rank"] <= cluster_profile["automation_rank"].median():
+            return "Vùng Kết Hợp"
+        return "Vùng Ổn Định"
+
+    cluster_profile["Zone"] = cluster_profile.apply(name_cluster, axis=1)
+    df["Zone"] = df["Cluster"].map(cluster_profile["Zone"])
+
+    n_components = max(1, min(3, len(df) - 1, len(CAP_FEATURES)))
+    pca = PCA(n_components=n_components)
     coords = pca.fit_transform(X_scaled)
-    df["PC1"] = coords[:, 0]
-    df["PC2"] = coords[:, 1] if coords.shape[1] > 1 else 0.0
+    df["x"] = coords[:, 0]
+    df["y"] = coords[:, 1] if coords.shape[1] > 1 else 0.0
+    df["z"] = coords[:, 2] if coords.shape[1] > 2 else 0.0
 
-    chart_header(
-        "Không Gian Đặc Trưng PCA",
-        "Nén 6 chiều dữ liệu xuống 2 thành phần chính (PC1, PC2) để quan sát cấu trúc tổng thể "
-        "của dữ liệu.",
-    )
-    fig = px.scatter(
-        df, x="PC1", y="PC2", color="Automation Capacity Rating",
-        hover_name=OCC_COL, color_continuous_scale="Viridis", labels=VN_LABELS,
-    )
-    st.plotly_chart(style_fig(fig, height=700), use_container_width=True)
+    zone_colors = {
+        "Thế Mạnh Con Người": PALETTE["secondary"],
+        "Vùng Rủi Ro Cao": PALETTE["danger"],
+        "Vùng Kết Hợp": PALETTE["warning"],
+        "Vùng Ổn Định": PALETTE["success"],
+    }
 
-    perplexity = min(30, max(5, (len(df) - 1) // 3))
-    chart_header(
-        "Bản Đồ t-SNE Các Đầu Việc",
-        "Kỹ thuật giảm chiều phi tuyến giúp các đầu việc có hồ sơ năng lực tương tự đứng gần nhau "
-        "hơn so với PCA, làm nổi bật cấu trúc cụm tự nhiên trong dữ liệu.",
-    )
-    tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42)
-    embedding = tsne.fit_transform(X_scaled)
-    df["t1"] = embedding[:, 0]
-    df["t2"] = embedding[:, 1]
-    fig = px.scatter(
-        df, x="t1", y="t2", color="Human Agency Scale Rating",
-        hover_name=OCC_COL, color_continuous_scale="Turbo", labels=VN_LABELS,
-    )
-    st.plotly_chart(style_fig(fig, height=750), use_container_width=True)
+    tab1, tab2 = st.tabs(["🗂️ Phân vùng tác động", "🔬 Thống kê chuyên sâu"])
 
-    y = df["Human Agency Scale Rating"]
-    X_rf = df[[
-        "Automation Capacity Rating", "Physical Action Requirement", "Involved Uncertainty",
-        "Domain Expertise Requirement", "Interpersonal Communication Requirement",
-    ]]
-    rf = RandomForestRegressor(n_estimators=200, random_state=42)
-    rf.fit(X_rf, y)
-    importance = pd.DataFrame({
-        "Yếu tố": [SHORT_VN.get(c, c) for c in X_rf.columns],
-        "Mức độ ảnh hưởng": rf.feature_importances_,
-    })
+    with tab1:
+        chart_header(
+            "Bản Đồ 3D Các Vùng Tác Động AI",
+            "Mỗi điểm là một đầu việc, được nén từ 6 chiều dữ liệu xuống 3 chiều (PCA). Tên vùng "
+            "được gán theo đặc điểm thực tế của từng cụm (mức tự động hóa & quyền tự chủ trung "
+            "bình), không theo số thứ tự cố định.",
+        )
+        fig = px.scatter_3d(df, x="x", y="y", z="z", color="Zone", hover_name=OCC_COL,
+                             color_discrete_map=zone_colors, labels=VN_LABELS)
+        fig.update_traces(marker=dict(size=5))
+        fig.update_layout(scene=dict(bgcolor="#FFFFFF"))
+        st.plotly_chart(style_fig(fig, height=700), use_container_width=True)
 
-    chart_header(
-        "Yếu Tố Ảnh Hưởng Mạnh Nhất Đến Quyền Tự Chủ Con Người",
-        "Dùng mô hình Random Forest để ước lượng yếu tố nào quyết định nhiều nhất đến mức độ tự "
-        "chủ của con người trong công việc.",
-    )
-    fig = px.bar(
-        importance.sort_values("Mức độ ảnh hưởng"), x="Mức độ ảnh hưởng", y="Yếu tố",
-        orientation="h", color="Mức độ ảnh hưởng", color_continuous_scale="Plasma",
-    )
-    st.plotly_chart(style_fig(fig, height=480), use_container_width=True)
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            count_df = df["Zone"].value_counts().reset_index()
+            count_df.columns = ["Vùng", "Số lượng"]
+            chart_header("Tỷ Trọng Các Vùng Tác Động", "Tỷ lệ % số đầu việc rơi vào từng vùng tác động của AI.")
+            fig2 = px.pie(count_df, names="Vùng", values="Số lượng", hole=0.5, color="Vùng", color_discrete_map=zone_colors)
+            st.plotly_chart(style_fig(fig2, height=480), use_container_width=True)
+        with col2:
+            profile = df.groupby("Zone")[CAP_FEATURES].mean().round(2).rename(columns=SHORT_VN)
+            profile.index.name = "Vùng"
+            st.subheader("Hồ Sơ Trung Bình Theo Vùng")
+            st.caption("💡 Giá trị trung bình của 6 yếu tố trong mỗi vùng.")
+            st.dataframe(profile, use_container_width=True)
 
-    chart_header(
-        "Phát Hiện Đầu Việc Bất Thường",
-        "Mô hình Isolation Forest đánh dấu các đầu việc có hồ sơ năng lực khác biệt rõ rệt so với "
-        "phần còn lại của dữ liệu.",
-    )
-    iso = IsolationForest(contamination=0.03, random_state=42)
-    df["Outlier"] = iso.fit_predict(X_scaled)
-    df["Type"] = np.where(df["Outlier"] == -1, "Bất thường", "Bình thường")
-    fig = px.scatter(
-        df, x="PC1", y="PC2", color="Type", hover_name=OCC_COL,
-        color_discrete_map={"Bình thường": PALETTE["secondary"], "Bất thường": PALETTE["danger"]},
-    )
-    st.plotly_chart(style_fig(fig, height=700), use_container_width=True)
+        danger_ratio = len(df[df.Zone == "Vùng Rủi Ro Cao"]) / len(df)
+        st.markdown(
+            f"""<div class="insight-box">
+            📌 <b>Nhận định:</b> <b>{danger_ratio:.1%}</b> đầu việc rơi vào <b>Vùng Rủi Ro Cao</b>
+            (năng lực tự động hóa kỹ thuật cao nhất trong các nhóm). Các nghề trong <b>Thế Mạnh Con
+            Người</b> nổi bật ở quyền tự chủ và phán đoán; <b>Vùng Kết Hợp</b> phản ánh nhóm AI hỗ
+            trợ mạnh nhưng chưa thay thế hoàn toàn; <b>Vùng Ổn Định</b> cân bằng giữa hai yếu tố.
+            </div>""",
+            unsafe_allow_html=True,
+        )
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Phương sai PCA giải thích", f"{sum(pca.explained_variance_ratio_):.1%}")
-    c2.metric("Số bản ghi", len(df))
-    c3.metric("Số bất thường", len(df[df.Type == "Bất thường"]))
-    c4.metric("Số đặc trưng", len(features))
+    with tab2:
+        chart_header("Ma Trận Tương Quan", "Mối liên hệ tuyến tính giữa các yếu tố năng lực.")
+        st.plotly_chart(corr_chart(df, CAP_FEATURES, SHORT_VN, height=560), use_container_width=True)
 
-    st.info(
-        """
-### 📌 Nhận định thống kê
+        chart_header(
+            "Không Gian Đặc Trưng PCA",
+            f"Nén 6 chiều dữ liệu xuống 2 thành phần chính, giải thích "
+            f"{sum(pca.explained_variance_ratio_[:2]):.1%} phương sai của dữ liệu gốc.",
+        )
+        fig_pca = px.scatter(df, x="x", y="y", color="Automation Capacity Rating", hover_name=OCC_COL,
+                              color_continuous_scale="Viridis", labels=VN_LABELS)
+        st.plotly_chart(style_fig(fig_pca, height=620), use_container_width=True)
 
-- Chuyên môn lĩnh vực và kỹ năng giao tiếp là hai yếu tố ảnh hưởng mạnh nhất tới quyền tự chủ con người.
-- PCA giải thích phần lớn phương sai của dữ liệu năng lực trong nhóm ngành công nghệ.
-- Một số đầu việc tạo thành nhóm bất thường, có khả năng chịu tác động AI khác biệt so với phần còn lại.
-- t-SNE cho thấy các đầu việc hình thành nhiều cụm tự nhiên theo hồ sơ năng lực.
-"""
-    )
+        perplexity = min(30, max(5, (len(df) - 1) // 3))
+        if perplexity < len(df):
+            chart_header(
+                "Bản Đồ t-SNE Các Đầu Việc",
+                "Kỹ thuật giảm chiều phi tuyến giúp các đầu việc có hồ sơ năng lực tương tự đứng "
+                "gần nhau hơn so với PCA, làm nổi bật cấu trúc cụm tự nhiên trong dữ liệu.",
+            )
+            tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42)
+            embedding = tsne.fit_transform(X_scaled)
+            df["t1"], df["t2"] = embedding[:, 0], embedding[:, 1]
+            fig_tsne = px.scatter(df, x="t1", y="t2", color="Human Agency Scale Rating", hover_name=OCC_COL,
+                                   color_continuous_scale="Turbo", labels=VN_LABELS)
+            st.plotly_chart(style_fig(fig_tsne, height=650), use_container_width=True)
+        else:
+            st.info("Không đủ số lượng đầu việc để tính t-SNE ổn định sau khi lọc dữ liệu.")
+
+        # --- Random Forest với train/test split để R² phản ánh đúng khả năng
+        # tổng quát hóa, thay vì chỉ báo cáo điểm trên tập huấn luyện (lỗi cũ) ---
+        y = df["Human Agency Scale Rating"]
+        X_rf = df[[c for c in CAP_FEATURES if c != "Human Agency Scale Rating"]]
+        if len(df) >= 10:
+            X_tr, X_te, y_tr, y_te = train_test_split(X_rf, y, test_size=0.25, random_state=42)
+            rf = RandomForestRegressor(n_estimators=200, random_state=42)
+            rf.fit(X_tr, y_tr)
+            r2_test = r2_score(y_te, rf.predict(X_te))
+            st.caption(f"📐 R² trên tập kiểm tra (giữ lại 25% dữ liệu): **{r2_test:.2f}** — phản ánh khả năng tổng quát hóa thực tế của mô hình.")
+        else:
+            rf = RandomForestRegressor(n_estimators=200, random_state=42)
+            rf.fit(X_rf, y)
+            st.caption("⚠️ Mẫu quá nhỏ để chia train/test — mô hình dưới đây chỉ mang tính minh họa xu hướng.")
+
+        importance = pd.DataFrame({
+            "Yếu tố": [SHORT_VN.get(c, c) for c in X_rf.columns],
+            "Mức độ ảnh hưởng": rf.feature_importances_,
+        })
+        chart_header(
+            "Yếu Tố Ảnh Hưởng Mạnh Nhất Đến Quyền Tự Chủ Con Người",
+            "Mô hình Random Forest ước lượng yếu tố nào quyết định nhiều nhất đến mức độ tự chủ của con người trong công việc.",
+        )
+        fig_imp = px.bar(importance.sort_values("Mức độ ảnh hưởng"), x="Mức độ ảnh hưởng", y="Yếu tố",
+                          orientation="h", color="Mức độ ảnh hưởng", color_continuous_scale="Plasma")
+        st.plotly_chart(style_fig(fig_imp, height=420), use_container_width=True)
+
+        contamination = st.slider("Tỉ lệ bất thường kỳ vọng (Isolation Forest)", 0.01, 0.10, 0.03, 0.01)
+        iso = IsolationForest(contamination=contamination, random_state=42)
+        df["Outlier"] = iso.fit_predict(X_scaled)
+        df["Type"] = np.where(df["Outlier"] == -1, "Bất thường", "Bình thường")
+        chart_header(
+            "Phát Hiện Đầu Việc Bất Thường",
+            "Mô hình Isolation Forest đánh dấu các đầu việc có hồ sơ năng lực khác biệt rõ rệt so với phần còn lại.",
+        )
+        fig_out = px.scatter(df, x="x", y="y", color="Type", hover_name=OCC_COL,
+                              color_discrete_map={"Bình thường": PALETTE["secondary"], "Bất thường": PALETTE["danger"]})
+        st.plotly_chart(style_fig(fig_out, height=620), use_container_width=True)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Phương sai PCA giải thích", f"{sum(pca.explained_variance_ratio_):.1%}")
+        c2.metric("Số bản ghi", len(df))
+        c3.metric("Số bất thường", len(df[df.Type == "Bất thường"]))
+        c4.metric("Số đặc trưng", len(CAP_FEATURES))
 
 # ============================================================
-# TRANG 9 — MẠNG LƯỚI NGHỀ NGHIỆP (PHÂN TÍCH ĐỘ TƯƠNG ĐỒNG)
+# TRANG 6 — MẠNG LƯỚI NGHỀ NGHIỆP
 # ============================================================
 
 elif page == "🔗 Mạng Lưới Nghề Nghiệp":
@@ -1034,13 +784,7 @@ elif page == "🔗 Mạng Lưới Nghề Nghiệp":
         "sở tham khảo cho việc chuyển đổi nghề nghiệp trong tương lai."
     )
 
-    features = [
-        "Automation Capacity Rating", "Physical Action Requirement", "Involved Uncertainty",
-        "Domain Expertise Requirement", "Interpersonal Communication Requirement",
-        "Human Agency Scale Rating",
-    ]
-
-    occ_df = capability.dropna(subset=features).groupby(OCC_COL)[features].mean().reset_index()
+    occ_df = capability.dropna(subset=CAP_FEATURES).groupby(OCC_COL)[CAP_FEATURES].mean().reset_index()
 
     if len(occ_df) < 2:
         st.warning("Không đủ số nghề khác nhau trong nhóm ngành công nghệ để dựng mạng lưới tương đồng.")
@@ -1051,7 +795,7 @@ elif page == "🔗 Mạng Lưới Nghề Nghiệp":
         )
 
         scaler_net = StandardScaler()
-        X_net = scaler_net.fit_transform(occ_df[features])
+        X_net = scaler_net.fit_transform(occ_df[CAP_FEATURES])
         sim = cosine_similarity(X_net)
 
         G = nx.Graph()
@@ -1065,29 +809,20 @@ elif page == "🔗 Mạng Lưới Nghề Nghiệp":
                     G.add_edge(i, j, weight=float(sim[i, j]))
 
         pos = nx.spring_layout(G, seed=42)
-
         node_df = pd.DataFrame([
-            {
-                "occupation": G.nodes[node]["occupation"],
-                "x": pos[node][0],
-                "y": pos[node][1],
-                "degree": G.degree(node),
-            }
+            {"occupation": G.nodes[node]["occupation"], "x": pos[node][0], "y": pos[node][1], "degree": G.degree(node)}
             for node in G.nodes()
         ])
 
         chart_header(
             "Bản Đồ Mạng Lưới Nghề Nghiệp",
-            "Vị trí các nghề được sắp xếp bằng thuật toán spring layout — nghề nào càng giống "
-            "nhiều nghề khác (số kết nối cao) thì điểm càng lớn.",
+            "Vị trí các nghề được sắp xếp bằng spring layout — nghề nào càng giống nhiều nghề khác (số kết nối cao) thì điểm càng lớn.",
         )
-        fig = px.scatter(
-            node_df, x="x", y="y", size="degree", hover_name="occupation",
-            color="degree", color_continuous_scale="Blues", labels=VN_LABELS,
-        )
+        fig = px.scatter(node_df, x="x", y="y", size="degree", hover_name="occupation",
+                          color="degree", color_continuous_scale="Blues", labels=VN_LABELS)
         fig.update_xaxes(visible=False)
         fig.update_yaxes(visible=False)
-        st.plotly_chart(style_fig(fig, height=650), use_container_width=True)
+        st.plotly_chart(style_fig(fig, height=600), use_container_width=True)
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Số nghề", len(G.nodes()))
@@ -1099,42 +834,34 @@ elif page == "🔗 Mạng Lưới Nghề Nghiệp":
             list(greedy_modularity_communities(G)) if len(G.edges()) > 0
             else [frozenset([node]) for node in G.nodes()]
         )
-        community_map = {}
-        for i, community in enumerate(communities):
-            for node in community:
-                community_map[node] = i
+        community_map = {node: i for i, community in enumerate(communities) for node in community}
         node_df["Cộng đồng"] = [community_map.get(node, -1) for node in G.nodes()]
 
         chart_header(
             "Cộng Đồng Nghề Nghiệp Tự Nhiên",
-            "Thuật toán phát hiện cộng đồng (modularity) nhóm các nghề có liên kết chặt chẽ với "
-            "nhau lại thành từng nhóm — mỗi màu là một nhóm nghề có hồ sơ năng lực gần gũi.",
+            "Thuật toán phát hiện cộng đồng (modularity) nhóm các nghề có liên kết chặt chẽ với nhau — mỗi màu là một nhóm nghề có hồ sơ năng lực gần gũi.",
         )
-        fig2 = px.scatter(
-            node_df, x="x", y="y", color="Cộng đồng", size="degree", hover_name="occupation",
-            labels=VN_LABELS,
-        )
+        fig2 = px.scatter(node_df, x="x", y="y", color="Cộng đồng", size="degree", hover_name="occupation", labels=VN_LABELS)
         fig2.update_xaxes(visible=False)
         fig2.update_yaxes(visible=False)
-        st.plotly_chart(style_fig(fig2, height=650), use_container_width=True)
+        st.plotly_chart(style_fig(fig2, height=600), use_container_width=True)
 
-        centrality = nx.degree_centrality(G)
-        top_nodes = sorted(centrality.items(), key=lambda x: x[1], reverse=True)[:20]
-        top_df = pd.DataFrame({
-            "Nghề nghiệp": [G.nodes[n]["occupation"] for n, _ in top_nodes],
-            "Độ trung tâm": [v for _, v in top_nodes],
-        })
-
-        chart_header(
-            "Nghề Nghiệp Trung Tâm Của Mạng Lưới",
-            "Độ trung tâm (centrality) cao cho thấy nghề đó có hồ sơ năng lực 'điển hình', kết nối "
-            "với nhiều nghề khác — thường là điểm trung chuyển tốt khi cân nhắc chuyển nghề.",
-        )
-        fig3 = px.bar(
-            top_df, x="Độ trung tâm", y="Nghề nghiệp", orientation="h",
-            color="Độ trung tâm", color_continuous_scale="Blues",
-        )
-        st.plotly_chart(style_fig(fig3, height=700), use_container_width=True)
+        if len(G.edges()) > 0:
+            centrality = nx.degree_centrality(G)
+            top_nodes = sorted(centrality.items(), key=lambda x: x[1], reverse=True)[:15]
+            top_df = pd.DataFrame({
+                "Nghề nghiệp": [G.nodes[n]["occupation"] for n, _ in top_nodes],
+                "Độ trung tâm": [v for _, v in top_nodes],
+            })
+            chart_header(
+                "Nghề Nghiệp Trung Tâm Của Mạng Lưới",
+                "Độ trung tâm cao cho thấy nghề đó có hồ sơ năng lực 'điển hình', kết nối với nhiều nghề khác — thường là điểm trung chuyển tốt khi cân nhắc chuyển nghề.",
+            )
+            fig3 = px.bar(top_df, x="Độ trung tâm", y="Nghề nghiệp", orientation="h",
+                          color="Độ trung tâm", color_continuous_scale="Blues")
+            st.plotly_chart(style_fig(fig3, height=550), use_container_width=True)
+        else:
+            st.info("Chưa có cặp nghề nào vượt ngưỡng tương đồng đã chọn — hãy giảm ngưỡng ở thanh trượt phía trên.")
 
         st.divider()
         st.markdown("#### 🔁 Gợi ý chuyển đổi nghề nghiệp")
@@ -1146,114 +873,136 @@ elif page == "🔗 Mạng Lưới Nghề Nghiệp":
             "Nghề nghiệp": occ_df.iloc[top_idx][OCC_COL].values,
             "Độ tương đồng": sims[top_idx],
         })
-
         chart_header(
             f"Các Nghề Tương Đồng Với “{occupation}”",
-            "Xếp hạng những nghề có hồ sơ năng lực gần giống nhất — đây là những hướng chuyển đổi "
-            "nghề nghiệp khả thi nếu nghề hiện tại bị ảnh hưởng mạnh bởi AI.",
+            "Xếp hạng những nghề có hồ sơ năng lực gần giống nhất — hướng chuyển đổi nghề nghiệp khả thi nếu nghề hiện tại bị ảnh hưởng mạnh bởi AI.",
         )
-        fig4 = px.bar(
-            transition_df, x="Độ tương đồng", y="Nghề nghiệp", orientation="h",
-            color="Độ tương đồng", color_continuous_scale="Tealgrn",
-        )
-        st.plotly_chart(style_fig(fig4, height=500), use_container_width=True)
-
-        st.info(
-            "### 📌 Nhận định\n\n"
-            "🔵 Các nghề trong nhóm ngành công nghệ thường tạo thành nhiều cộng đồng tự nhiên dựa "
-            "trên mức độ tương đồng kỹ năng.\n\n"
-            "🟢 Một số nghề đóng vai trò trung tâm, kết nối với nhiều nghề khác trong mạng lưới.\n\n"
-            "🟡 Lộ trình chuyển đổi nghề nghiệp có thể được tham khảo dựa trên độ tương đồng vector "
-            "kỹ năng.\n\n"
-            "🔴 Những nghề nằm ngoài mạng lưới (không có kết nối) thường có hồ sơ năng lực khác "
-            "biệt, cần lộ trình đào tạo lại riêng nếu bị ảnh hưởng bởi tự động hóa."
-        )
+        fig4 = px.bar(transition_df, x="Độ tương đồng", y="Nghề nghiệp", orientation="h",
+                      color="Độ tương đồng", color_continuous_scale="Tealgrn")
+        st.plotly_chart(style_fig(fig4, height=480), use_container_width=True)
 
 # ============================================================
-# TRANG 10 — LỘ TRÌNH HỌC TẬP & PHÁT TRIỂN NGHỀ NGHIỆP (ML)
+# TRANG 7 — ĐÁNH GIÁ NĂNG LỰC CÁ NHÂN & LỘ TRÌNH HỌC TẬP
 # ============================================================
 
-elif page == "🎓 Lộ Trình Học Tập":
+elif page == "🎯 Đánh Giá & Lộ Trình Cá Nhân":
 
-    st.title("🎓 Lộ Trình Học Tập & Phát Triển Nghề Nghiệp")
+    st.title("🎯 Đánh Giá Năng Lực Cá Nhân & Lộ Trình Phát Triển")
     st.caption(
-        "Huấn luyện mô hình học máy trên dữ liệu năng lực, lương và mức độ tự động hóa để đề xuất "
-        "nghề nghiệp phù hợp và xây dựng lộ trình phát triển kỹ năng cá nhân hóa."
+        "Nhập hồ sơ năng lực của bản thân để so sánh với mức trung bình ngành, nhận gợi ý nghề "
+        "nghiệp phù hợp và lộ trình phát triển kỹ năng cá nhân hóa."
     )
 
-    features = [
-        "Automation Capacity Rating", "Physical Action Requirement", "Involved Uncertainty",
-        "Domain Expertise Requirement", "Interpersonal Communication Requirement",
-        "Human Agency Scale Rating",
-    ]
+    st.markdown("##### Hồ sơ năng lực của bạn (thang điểm 1–5)")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        automation = st.slider("Mức độ phù hợp tự động hóa", 1.0, 5.0, 3.0)
+        physical = st.slider("Yêu cầu thể chất", 1.0, 5.0, 3.0)
+    with col2:
+        uncertainty = st.slider("Mức độ chấp nhận bất định", 1.0, 5.0, 3.0)
+        domain = st.slider("Chuyên môn lĩnh vực", 1.0, 5.0, 3.0)
+    with col3:
+        communication = st.slider("Kỹ năng giao tiếp", 1.0, 5.0, 3.0)
+        agency = st.slider("Mức độ tự chủ", 1.0, 5.0, 3.0)
 
-    occ_stats = capability.dropna(subset=features).groupby(OCC_COL)[features].mean()
+    user_vector = np.array([automation, physical, uncertainty, domain, communication, agency])
+    market_vector = np.array([capability[c].mean() for c in CAP_FEATURES])
+    labels6 = [SHORT_VN[c] for c in CAP_FEATURES]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(r=market_vector, theta=labels6, fill="toself", name="Trung bình ngành",
+                                   line_color=PALETTE["secondary"], fillcolor="rgba(14,165,233,0.20)"))
+    fig.add_trace(go.Scatterpolar(r=user_vector, theta=labels6, fill="toself", name="Hồ sơ của bạn",
+                                   line_color=PALETTE["accent"], fillcolor="rgba(124,58,237,0.20)"))
+    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
+    chart_header("So Sánh Hồ Sơ Cá Nhân Với Mức Trung Bình Ngành",
+                  "Vùng càng lệch khỏi nhau ở trục nào thì bạn càng khác biệt so với mặt bằng chung ở yếu tố đó.")
+    st.plotly_chart(style_fig(fig, height=560), use_container_width=True)
+
+    distance = np.linalg.norm(user_vector - market_vector)
+    score = max(0, 100 - distance * 15)
+    heuristic_note(
+        "độ phù hợp = 100 − (khoảng cách Euclid × 15), chỉ dùng để xếp hạng tương đối, "
+        "không phải xác suất hay điểm chuẩn hóa thống kê."
+    )
+    st.metric("🎯 Độ phù hợp với mặt bằng ngành", f"{score:.1f}%")
+
+    gap = user_vector - market_vector
+    gap_df = pd.DataFrame({"Yếu tố": labels6, "Khoảng cách": gap})
+    chart_header("Khoảng Cách Theo Từng Yếu Tố",
+                  "Giá trị dương: bạn đang vượt mức trung bình ngành. Giá trị âm: bạn đang thấp hơn.")
+    fig2 = px.bar(gap_df, x="Yếu tố", y="Khoảng cách", color="Khoảng cách", color_continuous_scale="RdYlGn")
+    st.plotly_chart(style_fig(fig2, height=420), use_container_width=True)
+
+    X_knn = capability[CAP_FEATURES].dropna()
+    k_neighbors = min(10, len(X_knn))
+    if k_neighbors >= 1:
+        model = NearestNeighbors(n_neighbors=k_neighbors)
+        model.fit(X_knn)
+        distances, indices = model.kneighbors([user_vector])
+        recommend = capability.loc[X_knn.index].iloc[indices[0]]
+        chart_header("Nghề Nghiệp Gợi Ý Cho Bạn", "Các nghề có hồ sơ năng lực gần nhất với hồ sơ bạn vừa nhập.")
+        st.dataframe(recommend[[OCC_COL]].rename(columns={OCC_COL: "Nghề nghiệp gợi ý"}), use_container_width=True)
+
+    if score >= 85:
+        st.success("✅ Hồ sơ của bạn rất phù hợp với mặt bằng chung của nhóm ngành công nghệ.")
+    elif score >= 70:
+        st.warning("⚠️ Hồ sơ khá phù hợp, nên nâng cấp thêm một vài kỹ năng.")
+    else:
+        st.error("🚨 Khoảng cách kỹ năng còn lớn so với mặt bằng ngành — nên có kế hoạch nâng cấp kỹ năng.")
+
+    st.divider()
+    st.markdown("### 🗺️ Lộ trình phát triển theo nghề mục tiêu")
+
+    occ_stats = capability.dropna(subset=CAP_FEATURES).groupby(OCC_COL)[CAP_FEATURES].mean()
     wage_emp = tasks.groupby(OCC_COL)[["Occupation Mean Annual Wage", "Occupation Employment"]].mean()
     occ_stats = occ_stats.join(wage_emp, how="inner").dropna()
 
-    if len(occ_stats) < 3:
-        st.warning("Không đủ số nghề trong nhóm ngành công nghệ để huấn luyện mô hình đề xuất.")
+    if len(occ_stats) < 5:
+        st.warning("Không đủ số nghề trong nhóm ngành công nghệ để xây dựng lộ trình gợi ý đáng tin cậy.")
     else:
-        # ---------- HUẤN LUYỆN MÔ HÌNH ----------
         scaler_r = StandardScaler()
-        X_occ_scaled = scaler_r.fit_transform(occ_stats[features])
+        X_occ_scaled = scaler_r.fit_transform(occ_stats[CAP_FEATURES])
 
-        rf_wage = RandomForestRegressor(n_estimators=300, random_state=42)
-        rf_wage.fit(occ_stats[features], occ_stats["Occupation Mean Annual Wage"])
-        r2_train = rf_wage.score(occ_stats[features], occ_stats["Occupation Mean Annual Wage"])
+        if len(occ_stats) >= 10:
+            X_tr, X_te, y_tr, y_te = train_test_split(
+                occ_stats[CAP_FEATURES], occ_stats["Occupation Mean Annual Wage"], test_size=0.25, random_state=42
+            )
+            rf_wage = RandomForestRegressor(n_estimators=300, random_state=42)
+            rf_wage.fit(X_tr, y_tr)
+            r2_test = r2_score(y_te, rf_wage.predict(X_te))
+            r2_label = f"R² (kiểm tra) = {r2_test:.2f}"
+        else:
+            rf_wage = RandomForestRegressor(n_estimators=300, random_state=42)
+            rf_wage.fit(occ_stats[CAP_FEATURES], occ_stats["Occupation Mean Annual Wage"])
+            r2_label = "mẫu quá nhỏ để kiểm tra — chỉ mang tính minh họa"
 
         importance_wage = pd.DataFrame({
-            "Yếu tố": [SHORT_VN.get(c, c) for c in features],
+            "Yếu tố": [SHORT_VN.get(c, c) for c in CAP_FEATURES],
             "Mức độ ảnh hưởng đến lương": rf_wage.feature_importances_,
         }).sort_values("Mức độ ảnh hưởng đến lương", ascending=False)
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Số nghề dùng để huấn luyện", len(occ_stats))
-        c2.metric("Độ khớp mô hình (R² trên dữ liệu huấn luyện)", f"{r2_train:.2f}")
-        c3.metric("Số yếu tố đầu vào", len(features))
+        c2.metric("Độ khớp mô hình", r2_label)
+        c3.metric("Số yếu tố đầu vào", len(CAP_FEATURES))
         st.caption(
             "⚠️ Mẫu huấn luyện chỉ gồm các nghề trong nhóm ngành công nghệ đã lọc, nên kết quả mang "
             "tính minh họa xu hướng, không phải con số dự báo tuyệt đối."
         )
 
-        chart_header(
-            "Yếu Tố Ảnh Hưởng Mạnh Nhất Đến Mức Lương",
-            "Mô hình Random Forest cho biết yếu tố năng lực nào tác động nhiều nhất đến lương trung "
-            "bình của nghề.",
-        )
-        fig_imp = px.bar(
-            importance_wage, x="Mức độ ảnh hưởng đến lương", y="Yếu tố", orientation="h",
-            color="Mức độ ảnh hưởng đến lương", color_continuous_scale="Plasma",
-        )
-        st.plotly_chart(style_fig(fig_imp, height=420), use_container_width=True)
-
-        st.divider()
-
-        # ---------- HỒ SƠ NGƯỜI DÙNG ----------
-        st.markdown("##### Hồ sơ năng lực hiện tại của bạn (thang điểm 1–5)")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            automation = st.slider("Mức độ phù hợp tự động hóa", 1.0, 5.0, 3.0, key="rm_automation")
-            physical = st.slider("Yêu cầu thể chất", 1.0, 5.0, 3.0, key="rm_physical")
-        with col2:
-            uncertainty = st.slider("Khả năng thích nghi với sự bất định", 1.0, 5.0, 3.0, key="rm_uncertainty")
-            domain = st.slider("Chuyên môn lĩnh vực", 1.0, 5.0, 3.0, key="rm_domain")
-        with col3:
-            communication = st.slider("Kỹ năng giao tiếp", 1.0, 5.0, 3.0, key="rm_communication")
-            agency = st.slider("Mức độ tự chủ trong công việc", 1.0, 5.0, 3.0, key="rm_agency")
-
-        user_vector = np.array([automation, physical, uncertainty, domain, communication, agency])
+        chart_header("Yếu Tố Ảnh Hưởng Mạnh Nhất Đến Mức Lương",
+                      "Yếu tố năng lực nào tác động nhiều nhất đến lương trung bình của nghề, theo Random Forest.")
+        fig_imp = px.bar(importance_wage, x="Mức độ ảnh hưởng đến lương", y="Yếu tố", orientation="h",
+                          color="Mức độ ảnh hưởng đến lương", color_continuous_scale="Plasma")
+        st.plotly_chart(style_fig(fig_imp, height=380), use_container_width=True)
 
         target_priority = st.radio(
-            "Mục tiêu ưu tiên",
-            ["Tăng lương", "Giảm rủi ro tự động hóa", "Phát triển toàn diện"],
-            horizontal=True,
+            "Mục tiêu ưu tiên", ["Tăng lương", "Giảm rủi ro tự động hóa", "Phát triển toàn diện"], horizontal=True,
         )
 
-        # ---------- TÍNH ĐIỂM ĐỀ XUẤT ----------
         user_scaled = scaler_r.transform([user_vector])
         similarity = cosine_similarity(user_scaled, X_occ_scaled)[0]
-
         wage_arr = occ_stats["Occupation Mean Annual Wage"].values
         risk_arr = occ_stats["Automation Capacity Rating"].values
 
@@ -1262,62 +1011,48 @@ elif page == "🎓 Lộ Trình Học Tập":
             rng = v.max() - v.min()
             return (v - v.min()) / rng if rng > 0 else np.ones_like(v) * 0.5
 
-        sim_norm = _normalize(similarity)
-        wage_norm = _normalize(wage_arr)
-        risk_norm = _normalize(risk_arr)
+        sim_norm, wage_norm, risk_norm = _normalize(similarity), _normalize(wage_arr), _normalize(risk_arr)
 
         if target_priority == "Tăng lương":
-            score = 0.5 * sim_norm + 0.5 * wage_norm
+            comp_score = 0.5 * sim_norm + 0.5 * wage_norm
         elif target_priority == "Giảm rủi ro tự động hóa":
-            score = 0.5 * sim_norm + 0.5 * (1 - risk_norm)
+            comp_score = 0.5 * sim_norm + 0.5 * (1 - risk_norm)
         else:
-            score = (sim_norm + wage_norm + (1 - risk_norm)) / 3
+            comp_score = (sim_norm + wage_norm + (1 - risk_norm)) / 3
+        heuristic_note("độ phù hợp nghề = trung bình có trọng số giữa độ tương đồng hồ sơ, mức lương và (1 − rủi ro tự động hóa), chuẩn hóa 0–1 — dùng để xếp hạng tương đối giữa các nghề trong nhóm dữ liệu hiện tại.")
 
         result = occ_stats.copy()
-        result["Độ phù hợp (%)"] = (score * 100).round(1)
+        result["Độ phù hợp (%)"] = (comp_score * 100).round(1)
         result["Lương trung bình"] = result["Occupation Mean Annual Wage"].round(0)
         result["Rủi ro tự động hóa (%)"] = (result["Automation Capacity Rating"] / 5 * 100).round(1)
         result = result.sort_values("Độ phù hợp (%)", ascending=False)
         top5 = result.head(5)
 
-        chart_header(
-            "Top 5 Nghề Nghiệp Được Đề Xuất",
-            "Xếp hạng dựa trên độ tương đồng hồ sơ năng lực, kết hợp với mục tiêu ưu tiên bạn đã chọn.",
-        )
+        chart_header("Top 5 Nghề Nghiệp Được Đề Xuất",
+                      "Xếp hạng dựa trên độ tương đồng hồ sơ năng lực, kết hợp với mục tiêu ưu tiên bạn đã chọn.")
         st.dataframe(
-            top5[["Lương trung bình", "Rủi ro tự động hóa (%)", "Độ phù hợp (%)"]]
-            .rename_axis("Nghề nghiệp").reset_index(),
+            top5[["Lương trung bình", "Rủi ro tự động hóa (%)", "Độ phù hợp (%)"]].rename_axis("Nghề nghiệp").reset_index(),
             use_container_width=True,
         )
 
-        st.divider()
-
-        # ---------- LỘ TRÌNH HỌC TẬP ----------
         st.markdown("#### 🗺️ Lộ trình phát triển kỹ năng")
-        candidate_list = top5.index.tolist() + [
-            o for o in result.index if o not in top5.index
-        ][:15]
+        candidate_list = top5.index.tolist() + [o for o in result.index if o not in top5.index][:15]
         target_occ = st.selectbox("Chọn nghề mục tiêu để xây lộ trình", candidate_list)
 
-        target_vector = occ_stats.loc[target_occ, features].values
-        gap_series = pd.Series(target_vector - user_vector, index=features)
+        target_vector = occ_stats.loc[target_occ, CAP_FEATURES].values
+        gap_series = pd.Series(target_vector - user_vector, index=CAP_FEATURES)
 
         DEVELOPABLE = [
             "Domain Expertise Requirement", "Interpersonal Communication Requirement",
             "Human Agency Scale Rating", "Involved Uncertainty",
         ]
         ACTIVITY_HINTS = {
-            "Domain Expertise Requirement": "Học chuyên sâu kiến thức ngành: chứng chỉ chuyên môn, "
-                "dự án thực tế, tài liệu kỹ thuật chuyên ngành.",
-            "Interpersonal Communication Requirement": "Rèn kỹ năng giao tiếp: thuyết trình, viết "
-                "báo cáo kỹ thuật, làm việc nhóm liên phòng ban.",
-            "Human Agency Scale Rating": "Rèn khả năng ra quyết định độc lập: chủ động đề xuất giải "
-                "pháp, quản lý dự án nhỏ, chịu trách nhiệm kết quả.",
-            "Involved Uncertainty": "Rèn khả năng thích nghi với sự mơ hồ: làm việc trong môi trường "
-                "thay đổi liên tục, thử nghiệm — đánh giá — cải tiến.",
+            "Domain Expertise Requirement": "Học chuyên sâu kiến thức ngành: chứng chỉ chuyên môn, dự án thực tế, tài liệu kỹ thuật chuyên ngành.",
+            "Interpersonal Communication Requirement": "Rèn kỹ năng giao tiếp: thuyết trình, viết báo cáo kỹ thuật, làm việc nhóm liên phòng ban.",
+            "Human Agency Scale Rating": "Rèn khả năng ra quyết định độc lập: chủ động đề xuất giải pháp, quản lý dự án nhỏ, chịu trách nhiệm kết quả.",
+            "Involved Uncertainty": "Rèn khả năng thích nghi với sự mơ hồ: làm việc trong môi trường thay đổi liên tục, thử nghiệm — đánh giá — cải tiến.",
         }
-
-        importance_map = dict(zip(features, rf_wage.feature_importances_))
+        importance_map = dict(zip(CAP_FEATURES, rf_wage.feature_importances_))
 
         roadmap_rows = []
         for f in DEVELOPABLE:
@@ -1325,12 +1060,7 @@ elif page == "🎓 Lộ Trình Học Tập":
             if g <= 0.15:
                 continue
             priority_score = g * importance_map[f]
-            if g < 0.5:
-                duration = "4–6 tuần"
-            elif g < 1.2:
-                duration = "2–3 tháng"
-            else:
-                duration = "4–6 tháng"
+            duration = "4–6 tuần" if g < 0.5 else ("2–3 tháng" if g < 1.2 else "4–6 tháng")
             roadmap_rows.append({
                 "Yếu tố cần phát triển": SHORT_VN.get(f, f),
                 "Khoảng cách hiện tại": round(g, 2),
@@ -1345,32 +1075,17 @@ elif page == "🎓 Lộ Trình Học Tập":
             roadmap_df.insert(0, "Bước", range(1, len(roadmap_df) + 1))
 
         if roadmap_df.empty:
-            st.success(
-                f"✅ Hồ sơ hiện tại của bạn đã tương đối phù hợp với “{target_occ}”. "
-                "Không có khoảng cách kỹ năng đáng kể cần ưu tiên phát triển."
-            )
+            st.success(f"✅ Hồ sơ hiện tại của bạn đã tương đối phù hợp với “{target_occ}”. Không có khoảng cách kỹ năng đáng kể cần ưu tiên phát triển.")
         else:
-            chart_header(
-                f"Lộ Trình Phát Triển Để Hướng Tới “{target_occ}”",
-                "Các yếu tố được sắp xếp theo mức độ ưu tiên (kết hợp khoảng cách kỹ năng và mức độ "
-                "ảnh hưởng đến lương).",
-            )
+            chart_header(f"Lộ Trình Phát Triển Để Hướng Tới “{target_occ}”",
+                          "Các yếu tố được sắp xếp theo mức độ ưu tiên (khoảng cách kỹ năng × mức độ ảnh hưởng đến lương).")
             st.dataframe(
-                roadmap_df[[
-                    "Bước", "Yếu tố cần phát triển", "Khoảng cách hiện tại",
-                    "Thời gian đề xuất", "Gợi ý hoạt động",
-                ]],
+                roadmap_df[["Bước", "Yếu tố cần phát triển", "Khoảng cách hiện tại", "Thời gian đề xuất", "Gợi ý hoạt động"]],
                 use_container_width=True, hide_index=True,
             )
-
-            fig_gap = px.bar(
-                roadmap_df, x="Khoảng cách hiện tại", y="Yếu tố cần phát triển", orientation="h",
-                color="Mức độ ưu tiên", color_continuous_scale="OrRd",
-            )
-            st.plotly_chart(
-                style_fig(fig_gap, "Mức Độ Ưu Tiên Theo Khoảng Cách Kỹ Năng", height=380),
-                use_container_width=True,
-            )
+            fig_gap = px.bar(roadmap_df, x="Khoảng cách hiện tại", y="Yếu tố cần phát triển", orientation="h",
+                              color="Mức độ ưu tiên", color_continuous_scale="OrRd")
+            st.plotly_chart(style_fig(fig_gap, "Mức Độ Ưu Tiên Theo Khoảng Cách Kỹ Năng", height=340), use_container_width=True)
 
         pred_wage_now = rf_wage.predict([user_vector])[0]
         pred_wage_target = occ_stats.loc[target_occ, "Occupation Mean Annual Wage"]
@@ -1379,11 +1094,7 @@ elif page == "🎓 Lộ Trình Học Tập":
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Lương ước tính với hồ sơ hiện tại", f"${pred_wage_now:,.0f}")
-        c2.metric(
-            f"Lương trung bình của “{target_occ}”",
-            f"${pred_wage_target:,.0f}",
-            delta=f"${wage_uplift:,.0f}",
-        )
+        c2.metric(f"Lương trung bình của “{target_occ}”", f"${pred_wage_target:,.0f}", delta=f"${wage_uplift:,.0f}")
         c3.metric("Rủi ro tự động hóa của nghề mục tiêu", f"{risk_target:.1f}%")
 
         st.info(
