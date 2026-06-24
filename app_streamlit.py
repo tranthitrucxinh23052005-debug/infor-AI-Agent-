@@ -241,10 +241,10 @@ def filter_it(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data
 def load_data():
-    desires = pd.read_csv("domain_worker_desires.csv")
-    metadata = pd.read_csv("domain_worker_metadata.csv")
-    capability = pd.read_csv("expert_rated_technological_capability.csv")
-    tasks = pd.read_csv("task_statement_with_metadata.csv")
+    desires = pd.read_csv("data/domain_worker_desires.csv")
+    metadata = pd.read_csv("data/domain_worker_metadata.csv")
+    capability = pd.read_csv("data/expert_rated_technological_capability.csv")
+    tasks = pd.read_csv("data/task_statement_with_metadata.csv")
     return desires, metadata, capability, tasks
 
 
@@ -287,6 +287,7 @@ with st.sidebar:
         "📉 Dự Báo Xu Hướng",
         "🔬 Phân Tích Thống Kê Chuyên Sâu",
         "🔗 Mạng Lưới Nghề Nghiệp",
+        "🎓 Lộ Trình Học Tập",
     ]
 
     page = st.pills(
@@ -1166,4 +1167,229 @@ elif page == "🔗 Mạng Lưới Nghề Nghiệp":
             "kỹ năng.\n\n"
             "🔴 Những nghề nằm ngoài mạng lưới (không có kết nối) thường có hồ sơ năng lực khác "
             "biệt, cần lộ trình đào tạo lại riêng nếu bị ảnh hưởng bởi tự động hóa."
+        )
+
+# ============================================================
+# TRANG 10 — LỘ TRÌNH HỌC TẬP & PHÁT TRIỂN NGHỀ NGHIỆP (ML)
+# ============================================================
+
+elif page == "🎓 Lộ Trình Học Tập":
+
+    st.title("🎓 Lộ Trình Học Tập & Phát Triển Nghề Nghiệp")
+    st.caption(
+        "Huấn luyện mô hình học máy trên dữ liệu năng lực, lương và mức độ tự động hóa để đề xuất "
+        "nghề nghiệp phù hợp và xây dựng lộ trình phát triển kỹ năng cá nhân hóa."
+    )
+
+    features = [
+        "Automation Capacity Rating", "Physical Action Requirement", "Involved Uncertainty",
+        "Domain Expertise Requirement", "Interpersonal Communication Requirement",
+        "Human Agency Scale Rating",
+    ]
+
+    occ_stats = capability.dropna(subset=features).groupby(OCC_COL)[features].mean()
+    wage_emp = tasks.groupby(OCC_COL)[["Occupation Mean Annual Wage", "Occupation Employment"]].mean()
+    occ_stats = occ_stats.join(wage_emp, how="inner").dropna()
+
+    if len(occ_stats) < 3:
+        st.warning("Không đủ số nghề trong nhóm ngành công nghệ để huấn luyện mô hình đề xuất.")
+    else:
+        # ---------- HUẤN LUYỆN MÔ HÌNH ----------
+        scaler_r = StandardScaler()
+        X_occ_scaled = scaler_r.fit_transform(occ_stats[features])
+
+        rf_wage = RandomForestRegressor(n_estimators=300, random_state=42)
+        rf_wage.fit(occ_stats[features], occ_stats["Occupation Mean Annual Wage"])
+        r2_train = rf_wage.score(occ_stats[features], occ_stats["Occupation Mean Annual Wage"])
+
+        importance_wage = pd.DataFrame({
+            "Yếu tố": [SHORT_VN.get(c, c) for c in features],
+            "Mức độ ảnh hưởng đến lương": rf_wage.feature_importances_,
+        }).sort_values("Mức độ ảnh hưởng đến lương", ascending=False)
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Số nghề dùng để huấn luyện", len(occ_stats))
+        c2.metric("Độ khớp mô hình (R² trên dữ liệu huấn luyện)", f"{r2_train:.2f}")
+        c3.metric("Số yếu tố đầu vào", len(features))
+        st.caption(
+            "⚠️ Mẫu huấn luyện chỉ gồm các nghề trong nhóm ngành công nghệ đã lọc, nên kết quả mang "
+            "tính minh họa xu hướng, không phải con số dự báo tuyệt đối."
+        )
+
+        chart_header(
+            "Yếu Tố Ảnh Hưởng Mạnh Nhất Đến Mức Lương",
+            "Mô hình Random Forest cho biết yếu tố năng lực nào tác động nhiều nhất đến lương trung "
+            "bình của nghề.",
+        )
+        fig_imp = px.bar(
+            importance_wage, x="Mức độ ảnh hưởng đến lương", y="Yếu tố", orientation="h",
+            color="Mức độ ảnh hưởng đến lương", color_continuous_scale="Plasma",
+        )
+        st.plotly_chart(style_fig(fig_imp, height=420), use_container_width=True)
+
+        st.divider()
+
+        # ---------- HỒ SƠ NGƯỜI DÙNG ----------
+        st.markdown("##### Hồ sơ năng lực hiện tại của bạn (thang điểm 1–5)")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            automation = st.slider("Mức độ phù hợp tự động hóa", 1.0, 5.0, 3.0, key="rm_automation")
+            physical = st.slider("Yêu cầu thể chất", 1.0, 5.0, 3.0, key="rm_physical")
+        with col2:
+            uncertainty = st.slider("Khả năng thích nghi với sự bất định", 1.0, 5.0, 3.0, key="rm_uncertainty")
+            domain = st.slider("Chuyên môn lĩnh vực", 1.0, 5.0, 3.0, key="rm_domain")
+        with col3:
+            communication = st.slider("Kỹ năng giao tiếp", 1.0, 5.0, 3.0, key="rm_communication")
+            agency = st.slider("Mức độ tự chủ trong công việc", 1.0, 5.0, 3.0, key="rm_agency")
+
+        user_vector = np.array([automation, physical, uncertainty, domain, communication, agency])
+
+        target_priority = st.radio(
+            "Mục tiêu ưu tiên",
+            ["Tăng lương", "Giảm rủi ro tự động hóa", "Phát triển toàn diện"],
+            horizontal=True,
+        )
+
+        # ---------- TÍNH ĐIỂM ĐỀ XUẤT ----------
+        user_scaled = scaler_r.transform([user_vector])
+        similarity = cosine_similarity(user_scaled, X_occ_scaled)[0]
+
+        wage_arr = occ_stats["Occupation Mean Annual Wage"].values
+        risk_arr = occ_stats["Automation Capacity Rating"].values
+
+        def _normalize(v):
+            v = np.asarray(v, dtype=float)
+            rng = v.max() - v.min()
+            return (v - v.min()) / rng if rng > 0 else np.ones_like(v) * 0.5
+
+        sim_norm = _normalize(similarity)
+        wage_norm = _normalize(wage_arr)
+        risk_norm = _normalize(risk_arr)
+
+        if target_priority == "Tăng lương":
+            score = 0.5 * sim_norm + 0.5 * wage_norm
+        elif target_priority == "Giảm rủi ro tự động hóa":
+            score = 0.5 * sim_norm + 0.5 * (1 - risk_norm)
+        else:
+            score = (sim_norm + wage_norm + (1 - risk_norm)) / 3
+
+        result = occ_stats.copy()
+        result["Độ phù hợp (%)"] = (score * 100).round(1)
+        result["Lương trung bình"] = result["Occupation Mean Annual Wage"].round(0)
+        result["Rủi ro tự động hóa (%)"] = (result["Automation Capacity Rating"] / 5 * 100).round(1)
+        result = result.sort_values("Độ phù hợp (%)", ascending=False)
+        top5 = result.head(5)
+
+        chart_header(
+            "Top 5 Nghề Nghiệp Được Đề Xuất",
+            "Xếp hạng dựa trên độ tương đồng hồ sơ năng lực, kết hợp với mục tiêu ưu tiên bạn đã chọn.",
+        )
+        st.dataframe(
+            top5[["Lương trung bình", "Rủi ro tự động hóa (%)", "Độ phù hợp (%)"]]
+            .rename_axis("Nghề nghiệp").reset_index(),
+            use_container_width=True,
+        )
+
+        st.divider()
+
+        # ---------- LỘ TRÌNH HỌC TẬP ----------
+        st.markdown("#### 🗺️ Lộ trình phát triển kỹ năng")
+        candidate_list = top5.index.tolist() + [
+            o for o in result.index if o not in top5.index
+        ][:15]
+        target_occ = st.selectbox("Chọn nghề mục tiêu để xây lộ trình", candidate_list)
+
+        target_vector = occ_stats.loc[target_occ, features].values
+        gap_series = pd.Series(target_vector - user_vector, index=features)
+
+        DEVELOPABLE = [
+            "Domain Expertise Requirement", "Interpersonal Communication Requirement",
+            "Human Agency Scale Rating", "Involved Uncertainty",
+        ]
+        ACTIVITY_HINTS = {
+            "Domain Expertise Requirement": "Học chuyên sâu kiến thức ngành: chứng chỉ chuyên môn, "
+                "dự án thực tế, tài liệu kỹ thuật chuyên ngành.",
+            "Interpersonal Communication Requirement": "Rèn kỹ năng giao tiếp: thuyết trình, viết "
+                "báo cáo kỹ thuật, làm việc nhóm liên phòng ban.",
+            "Human Agency Scale Rating": "Rèn khả năng ra quyết định độc lập: chủ động đề xuất giải "
+                "pháp, quản lý dự án nhỏ, chịu trách nhiệm kết quả.",
+            "Involved Uncertainty": "Rèn khả năng thích nghi với sự mơ hồ: làm việc trong môi trường "
+                "thay đổi liên tục, thử nghiệm — đánh giá — cải tiến.",
+        }
+
+        importance_map = dict(zip(features, rf_wage.feature_importances_))
+
+        roadmap_rows = []
+        for f in DEVELOPABLE:
+            g = gap_series[f]
+            if g <= 0.15:
+                continue
+            priority_score = g * importance_map[f]
+            if g < 0.5:
+                duration = "4–6 tuần"
+            elif g < 1.2:
+                duration = "2–3 tháng"
+            else:
+                duration = "4–6 tháng"
+            roadmap_rows.append({
+                "Yếu tố cần phát triển": SHORT_VN.get(f, f),
+                "Khoảng cách hiện tại": round(g, 2),
+                "Mức độ ưu tiên": round(priority_score, 3),
+                "Thời gian đề xuất": duration,
+                "Gợi ý hoạt động": ACTIVITY_HINTS[f],
+            })
+
+        roadmap_df = pd.DataFrame(roadmap_rows)
+        if not roadmap_df.empty:
+            roadmap_df = roadmap_df.sort_values("Mức độ ưu tiên", ascending=False).reset_index(drop=True)
+            roadmap_df.insert(0, "Bước", range(1, len(roadmap_df) + 1))
+
+        if roadmap_df.empty:
+            st.success(
+                f"✅ Hồ sơ hiện tại của bạn đã tương đối phù hợp với “{target_occ}”. "
+                "Không có khoảng cách kỹ năng đáng kể cần ưu tiên phát triển."
+            )
+        else:
+            chart_header(
+                f"Lộ Trình Phát Triển Để Hướng Tới “{target_occ}”",
+                "Các yếu tố được sắp xếp theo mức độ ưu tiên (kết hợp khoảng cách kỹ năng và mức độ "
+                "ảnh hưởng đến lương).",
+            )
+            st.dataframe(
+                roadmap_df[[
+                    "Bước", "Yếu tố cần phát triển", "Khoảng cách hiện tại",
+                    "Thời gian đề xuất", "Gợi ý hoạt động",
+                ]],
+                use_container_width=True, hide_index=True,
+            )
+
+            fig_gap = px.bar(
+                roadmap_df, x="Khoảng cách hiện tại", y="Yếu tố cần phát triển", orientation="h",
+                color="Mức độ ưu tiên", color_continuous_scale="OrRd",
+            )
+            st.plotly_chart(
+                style_fig(fig_gap, "Mức Độ Ưu Tiên Theo Khoảng Cách Kỹ Năng", height=380),
+                use_container_width=True,
+            )
+
+        pred_wage_now = rf_wage.predict([user_vector])[0]
+        pred_wage_target = occ_stats.loc[target_occ, "Occupation Mean Annual Wage"]
+        wage_uplift = pred_wage_target - pred_wage_now
+        risk_target = occ_stats.loc[target_occ, "Automation Capacity Rating"] / 5 * 100
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Lương ước tính với hồ sơ hiện tại", f"${pred_wage_now:,.0f}")
+        c2.metric(
+            f"Lương trung bình của “{target_occ}”",
+            f"${pred_wage_target:,.0f}",
+            delta=f"${wage_uplift:,.0f}",
+        )
+        c3.metric("Rủi ro tự động hóa của nghề mục tiêu", f"{risk_target:.1f}%")
+
+        st.info(
+            "### 📌 Lưu ý\n\n"
+            "Lộ trình trên được xây dựng từ phân tích dữ liệu thống kê (khoảng cách hồ sơ năng lực "
+            "kết hợp mức độ ảnh hưởng của từng yếu tố đến lương), mang tính định hướng. "
+            "Đây không phải lời khuyên nghề nghiệp chuyên sâu — nên kết hợp thêm tư vấn từ chuyên "
+            "gia hướng nghiệp hoặc người quản lý trực tiếp trước khi ra quyết định."
         )
