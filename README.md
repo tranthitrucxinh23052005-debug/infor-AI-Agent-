@@ -6,7 +6,7 @@
 # MỘT SỐ LƯU Ý
 
 ### 1. File app.ipynb là file code thuần
-### 2. File app_streamlit.py là file kết hợp với streamlit để trực quan hóa trên web, để xem vui lòng tải code xuống và chay lệnh
+### 2. File app_streamlit.py là file kết hợp với streamlit để trực quan hóa trên web, để xem vui lòng tải code xuống và chạy lệnh hoặc truy cập: https://baitapcanhan.streamlit.app/
 ```bash
 streamlit run app_streamlit.py
 ```
